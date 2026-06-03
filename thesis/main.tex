@@ -1,0 +1,57 @@
+% Placeholder skeleton. Replace with a UJ-approved template once chosen.
+% Candidate templates:
+%   * https://www.overleaf.com/latex/templates/completely-unofficial-jagiellonian-university-thesis-template/fxnssjzrtpfk
+%     (Unofficial UJ; supports English and Polish.)
+%   * https://www.overleaf.com/latex/templates/wzor-isi-uj/ddszfvqhkwmt
+%     (UJ ISI; less appropriate — different faculty.)
+%   * Ask supervisor Lech Duraj if WMiI UJ has an official template.
+\documentclass[12pt,a4paper]{report}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{algorithm, algpseudocode}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{cleveref}
+\usepackage[a4paper, margin=2.5cm]{geometry}
+
+\newtheorem{theorem}{Theorem}[chapter]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{definition}[theorem]{Definition}
+
+\title{Implementation and Performance Analysis of a Polynomial-Time Algorithm
+       for the Next-to-Shortest Path Problem in Directed Weighted Graphs}
+\author{Ihar Maroz \\ Supervisor: Lech Duraj \\ Jagiellonian University}
+\date{2026}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+TODO: write abstract once experiments are in. Briefly: we implement the
+Chen--Wein--Zhang (2025) polynomial-time algorithm for the next-to-shortest
+path problem on positively weighted directed graphs, the first polynomial
+algorithm for this problem after roughly thirty years of being open, and
+empirically evaluate its practical performance against a brute-force oracle
+and Yen's $k$-shortest-simple-paths heuristic with $k=2$.
+\end{abstract}
+
+\tableofcontents
+
+\include{chapters/intro}
+\include{chapters/litreview}
+\include{chapters/algorithm}
+\include{chapters/implementation}
+\include{chapters/experiments}
+\include{chapters/conclusion}
+
+\bibliographystyle{plain}
+\bibliography{refs}
+
+\end{document}
