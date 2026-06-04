@@ -1,6 +1,7 @@
 #include "baseline/yen.h"
 
 #include <algorithm>
+#include <cassert>
 #include <queue>
 #include <set>
 #include <utility>
@@ -82,12 +83,11 @@ NspResult yen_nsp(const Graph& g, VertexId s, VertexId t, int k_max) {
     std::vector<std::vector<EdgeId>> A;
     A.push_back(recover_path(g, first, s, t));
 
-    if (path_cost(g, A.front()) > r.shortest_cost) {
-        // Defensive: this should never happen with a correct Dijkstra.
-        r.cost = path_cost(g, A.front());
-        r.edges = A.front();
-        return r;
-    }
+    // Invariant: the path recovered by walking `first.parent[]` backwards from
+    // t to s must sum exactly to `first.dist[t]`. If this assert ever fires,
+    // there is a bug in Dijkstra (probably dist[] and parent[] are out of sync).
+    // Verified at the Dijkstra layer by Dijkstra.RecoveredPathCostMatchesDist.
+    assert(path_cost(g, A.front()) == r.shortest_cost);
 
     // Candidate paths, ordered by cost. We deduplicate by edge sequence.
     struct Candidate {
