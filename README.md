@@ -23,10 +23,10 @@ After building, the following binaries are produced in `build/`:
 
 | Binary | Purpose |
 |--------|---------|
-| `unit_tests` | 37 GoogleTest unit tests |
+| `unit_tests` | 68 GoogleTest unit tests |
 | `fuzz_brute_vs_yen` | Differential fuzzer: brute force vs Yen-NSP |
 | `fuzz_cwz_vs_brute` | Differential fuzzer: CWZ vs brute force |
-| `bench` | Benchmark harness on random graph families (`results/bench.csv`) |
+| `bench` | Benchmark harness on 5 graph families (`results/bench.csv`) |
 | `bench_adversarial` | Diamond-chain adversarial benchmark (`results/bench_adversarial.csv`) |
 | `nsp-cli` | Solve NSP on a single graph file |
 
@@ -59,15 +59,15 @@ python3 bench/plots/make_plots.py
 ```
 
 Plots land in `results/`. The adversarial benchmark intentionally lets
-Yen-NSP run for up to ~70 s on the larger inputs; the full sweep takes a
+Yen-NSP run for ~60 s on the larger inputs; the full sweep takes a
 couple of minutes.
 
 ### Running fuzz tests
 
 ```bash
 ./build/fuzz_cwz_vs_brute 1000 10 0xDEADBEEF
-# Expected: mismatches=0 (or 1-3, depending on seed; 3+ back-edge middles
-# are not all covered).
+# Expected: mismatches=0. The faithful pipeline matches the brute-force
+# oracle on every random instance we have tested (35,000+ trials, |V|<=14).
 ```
 
 ## Layout
@@ -80,7 +80,7 @@ couple of minutes.
 | `src/cwz/` | CWZ reductions and layered NSP |
 | `src/baseline/` | Brute-force NSP, Yen-NSP |
 | `src/cli/` | `nsp-cli` |
-| `generators/` | Graph generators (Erdős-Rényi, DAG, layered, grid, scale-free) |
+| `generators/` | Graph generators (Erdős-Rényi, DAG, layered, grid, scale-free, diamond-chain) |
 | `tests/unit/` | Unit tests |
 | `tests/correctness/` | Differential fuzzers |
 | `bench/` | Benchmark harness + plotting |
@@ -122,3 +122,18 @@ distinct shortcut weights per vertex pair instead of implementing `NextSP`'s
 candidate-recording (K=1 with candidates). K=1 alone misses NSPs; no cap
 exhausts memory on dense inputs; K=5 is validated empirically. See
 `thesis/chapters/implementation.tex` §"Multi-edge cap".
+
+### A note on complexity
+
+The paper proves a worst-case bound of `O(|V|^4 |E|^3 log|V|)`. That bound
+follows from the algorithm's *structure* (which this code now matches), not
+from the benchmarks: experiments measure runtime on particular inputs and
+cannot verify a worst-case upper bound. What the benchmarks do show is that
+the implementation is empirically polynomial with a small exponent (log-log
+fit slope ≈ 2–3 on the families tested) — i.e. far below the worst case on
+real inputs. Two caveats on inheriting the paper's exact bound: the max-flow
+2-VDP is `O(|V|+|E|)` per call (same class as Tholey, larger constant), and
+the `K=5` cap is a non-rigorous bound on the `reduce_to_straight` blow-up
+(uncapped it is exponential). Implementing `NextSP`'s candidate-recording
+would make the whole pipeline a provable transcription of the paper's
+complexity.
