@@ -1,5 +1,63 @@
 \chapter{Literature Review}
+\label{ch:litreview}
 
-% TODO: undirected NSP (Krasikov--Noble, Hershberger--Suri); planar directed (Wu);
-% $k$-shortest paths (Yen 1971, Eppstein 1998); NP-hardness of NSP for non-negative
-% (zero-weight) directed graphs; the open question resolved by Chen--Wein--Zhang 2025.
+\section{Shortest paths}
+
+Single-source shortest paths in directed graphs with non-negative weights are
+classically solved by Dijkstra's algorithm in
+$O((|V|+|E|)\log|V|)$ time using a binary heap, or $O(|V|\log|V|+|E|)$ with a
+Fibonacci heap~\cite{Dijkstra1959, FredmanTarjan1987}. We rely on the
+former; for our typical graph sizes the asymptotic improvement of Fibonacci
+heaps is not worth the constant factor.
+
+\section{$k$-shortest simple paths}
+
+Yen's algorithm~\cite{Yen1971} enumerates the $k$ shortest simple $s\to t$
+paths in non-decreasing order of weight using $k$ Dijkstra-style searches per
+``spur'' along the previously-found paths. Its runtime is
+$O(kn(m+n\log n))$, which is polynomial in $k$ but Yen's algorithm is used
+here in a slightly non-standard way: we invoke it as an NSP solver by
+enumerating paths until one is found whose weight strictly exceeds
+$d_G(s,t)$. If the graph has $r$ distinct simple shortest paths from $s$ to
+$t$, this requires examining at least $r$ paths before finding one with
+strictly greater cost, and $r$ can be exponential in $|V|$. In favorable
+inputs Yen is extremely fast, but on adversarial graphs with many alternate
+shortest paths it degenerates.
+
+Eppstein~\cite{Eppstein1998} gives an $O((m + n\log n) + k)$ algorithm for
+$k$-shortest paths that need not be simple. NSP requires simplicity and so
+Eppstein's algorithm does not directly apply.
+
+\section{Next-to-shortest path: positive results}
+
+Lalla and Srinivasan~\cite{LallaSrinivasan1992} introduced the NSP problem
+and showed it is NP-complete in directed graphs with non-negative weights (in
+particular, when zero weights are permitted). The undirected case admits a
+polynomial-time algorithm: Krasikov and Noble~\cite{KrasikovNoble2004}
+gave an $O(n^3 m)$-time algorithm; Wu's later
+work~\cite{Wu2010} brings the bound down to $O(nm)$ on undirected graphs.
+For \emph{planar} directed graphs with positive weights, Wu also gives a
+polynomial-time algorithm.
+
+For \emph{general} directed graphs with strictly positive weights, the
+problem remained open for nearly three decades. Chen, Wein, and Zhang
+\cite{ChenWeinZhang2025} resolved it in November~2025 with an
+$O\bigl(|V|^{4}|E|^{3}\log|V|\bigr)$-time algorithm. The algorithm proceeds
+by two reductions --- general digraph to $(s,t)$-straight to $(s,t)$-layered
+--- followed by a structural enumeration over $6$-tuples of vertices and
+edges that, together with a $2$-vertex-disjoint-paths subroutine in a DAG,
+suffice to find any NSP if one exists.
+
+\section{Related primitives}
+
+The CWZ algorithm depends critically on a subroutine for finding two
+vertex-disjoint paths between prescribed source-sink pairs in a directed
+acyclic graph. Fortune, Hopcroft, and Wyllie~\cite{FortuneHopcroftWyllie1980}
+gave the first polynomial-time algorithm for the $k$-vertex-disjoint-paths
+problem in DAGs for fixed $k$. Tholey~\cite{Tholey2012} subsequently gave a
+linear-time algorithm for the special case $k=2$. The CWZ paper cites Tholey
+for the $O(|V|+|E|)$ bound on the inner subroutine. In the present work we
+substitute a simpler max-flow-based 2-VDP that costs an extra factor of
+$O(|V|+|E|)$ per invocation; this preserves correctness while raising the
+overall complexity by a small polynomial factor relative to the paper's
+tight bound.

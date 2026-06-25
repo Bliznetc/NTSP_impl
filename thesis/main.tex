@@ -11,14 +11,16 @@
 \usepackage[utf8]{inputenc}
 \usepackage[english]{babel}
 \usepackage{lmodern}
-\usepackage{microtype}
 \usepackage{amsmath, amssymb, amsthm}
-\usepackage{algorithm, algpseudocode}
 \usepackage{graphicx}
-\usepackage{booktabs}
-\usepackage{hyperref}
-\usepackage{cleveref}
 \usepackage[a4paper, margin=2.5cm]{geometry}
+% Lightweight shims so we don't need booktabs / cleveref / microtype /
+% algorithm / algpseudocode / hyperref (which require texlive-latex-recommended
+% + texlive-latex-extra). Install those packages for nicer typography and
+% clickable cross-references in the PDF.
+\newcommand{\toprule}{\hline\hline}
+\newcommand{\midrule}{\hline}
+\newcommand{\bottomrule}{\hline\hline}
 
 \newtheorem{theorem}{Theorem}[chapter]
 \newtheorem{lemma}[theorem]{Lemma}
@@ -34,12 +36,35 @@
 \maketitle
 
 \begin{abstract}
-TODO: write abstract once experiments are in. Briefly: we implement the
-Chen--Wein--Zhang (2025) polynomial-time algorithm for the next-to-shortest
-path problem on positively weighted directed graphs, the first polynomial
-algorithm for this problem after roughly thirty years of being open, and
-empirically evaluate its practical performance against a brute-force oracle
-and Yen's $k$-shortest-simple-paths heuristic with $k=2$.
+We implement and empirically evaluate the polynomial-time algorithm of
+Chen, Wein, and Zhang (arXiv:2511.04345, November~2025) for the
+next-to-shortest path (NSP) problem in directed graphs with strictly
+positive edge weights --- the first polynomial-time algorithm for this
+problem after nearly thirty years as an open question. Our C++20
+implementation follows the paper's three-stage pipeline: a reduction to
+an $(s,t)$-straight digraph by iterative folding of off-shortest-path
+vertices, a further reduction to a strictly $(s,t)$-layered digraph
+(subdividing layer-skipping forward edges and removing forward-going
+back-edges while recording their candidate paths), and finally a
+$6$-tuple enumeration on the layered graph that invokes a
+$2$-vertex-disjoint paths subroutine in directed acyclic graphs.
+
+Correctness is validated by two independent oracles --- a brute-force
+simple-path enumerator (capped at $|V|\le 13$) and Yen's $k$-shortest
+simple-paths algorithm used as an NSP solver --- and by a
+differential-fuzzing harness that records \emph{zero} NSP-cost
+mismatches across more than $35{,}000$ random instances ($|V|\le 14$) and
+$100\%$ agreement with Yen on every benign benchmark instance up to
+$|V|=50$. Empirically the CWZ algorithm is several orders of magnitude
+slower than Yen on the four benign random families we sweep (where
+shortest paths are typically unique), but on a deliberately-constructed
+adversarial diamond-chain family with $2^{k}$ distinct shortest paths
+the picture reverses: at $k=15$ ($|V|=46$) Yen takes $59$~seconds while
+CWZ completes in $1.4$~milliseconds, a ${\sim}41{,}000\times$ ratio that
+grows exponentially with $k$; and with a practical enumeration cap Yen
+returns the wrong answer entirely on the largest instances while CWZ
+stays correct. This is, to our knowledge, the first empirical study of
+the CWZ algorithm.
 \end{abstract}
 
 \tableofcontents

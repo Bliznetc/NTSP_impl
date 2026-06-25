@@ -1,6 +1,139 @@
 \chapter{The Chen--Wein--Zhang Algorithm}
+\label{ch:algorithm}
 
-% TODO: three reductions; (s,t)-straight and (s,t)-layered graphs; back-edge
-% decomposition; pair of disjoint forward paths; Lemma 5.3 (statement and
-% proof sketch); 2-VDP-in-DAG subroutine (Tholey 2012); overall complexity
-% $O(|V|^4 |E|^3 \log |V|)$.
+This chapter describes the algorithm of Chen, Wein, and
+Zhang~\cite{ChenWeinZhang2025} at the level of detail required to follow the
+implementation in Chapter~\ref{ch:implementation}. We follow the paper's
+notation. Let $G=(V,E,w)$ be a directed graph with $w:E\to\mathbb{R}_{>0}$,
+and let $s,t\in V$ be two distinguished vertices.
+
+\section{Preliminaries}
+
+For any vertex $v$, write $d_G(s,v)$ for the shortest distance from $s$ to
+$v$ in~$G$.
+
+\begin{definition}[Forward-edge, back-edge]
+An edge $(u,v)\in E$ is a \emph{forward-edge} if
+$d_G(s,u)+w(u,v)=d_G(s,v)$, and a \emph{back-edge} if
+$d_G(s,u)+w(u,v)>d_G(s,v)$.
+\end{definition}
+
+Equivalently, forward edges are exactly the edges lying on some shortest
+$s\to v$ path. The \emph{shortest-path DAG} of $(G,s)$ is the subgraph
+consisting of all forward edges.
+
+\begin{definition}[(s,t)-straight, (s,t)-layered]
+$G$ is \emph{$(s,t)$-straight} if every vertex $v$ satisfies
+$d_G(s,v)+d_G(v,t)=d_G(s,t)$, i.e.~lies on some shortest $s\to t$ path. $G$
+is \emph{$(s,t)$-layered} if it is $(s,t)$-straight and additionally every
+edge $(u,v)\in E$ has $d_G(s,u)\neq d_G(s,v)$ and every forward edge satisfies
+$d_G(s,v) = d_G(s,u)+w(u,v)$ where the gap equals the consecutive
+distance-layer spacing.
+\end{definition}
+
+In an $(s,t)$-layered graph every forward path from $s$ to $t$ has the same
+weight, $d_G(s,t)$. Therefore any \emph{not-shortest} $s\to t$ path must
+include at least one back-edge --- this is the structural observation that
+the rest of the algorithm exploits.
+
+\section{Reductions}
+
+The CWZ algorithm reduces a general digraph to an $(s,t)$-straight digraph,
+then to an $(s,t)$-layered digraph; the NSP problem is solved on the
+layered graph and the answer is mapped back.
+
+\paragraph{$G$ to $(s,t)$-straight (algorithm \textsc{NextSP}).}
+Compute $d_G(s,\cdot)$ and $d_G(\cdot,t)$ via two Dijkstra runs. For every
+vertex $u$ off any shortest $s\to t$ path (i.e.~with
+$d_G(s,u)+d_G(u,t)>d_G(s,t)$), fold $u$: for every in-neighbor $x$ and
+every out-neighbor $y$ of $u$, add a shortcut edge $(x,y)$ of weight
+$w(x,u)+w(u,y)$. The reduced graph contains only on-shortest-path vertices.
+
+\paragraph{$(s,t)$-straight to $(s,t)$-layered (algorithm
+\textsc{NextSP-Straight}).} The straight graph has vertices at discrete
+distance values $q_0<q_1<\dots<q_K$. The algorithm repeatedly fixes an
+edge that violates the layered definition (Definition~4.1), reducing a
+potential $\varphi(G)$ by one each step until $\varphi(G)=0$:
+\begin{itemize}
+  \item A \emph{forward} edge $(u,v)$ (with $d_G(s,u)+w(u,v)=d_G(s,v)$)
+    that skips layers is subdivided into a chain of single-layer forward
+    edges through fresh intermediate vertices, preserving the path
+    weight.
+  \item A \emph{back-edge} $(u,v)$ that goes forward or sideways in
+    distance (i.e.~$d_G(s,u)\le d_G(s,v)$ but
+    $d_G(s,u)+w(u,v)>d_G(s,v)$) violates the definition and is
+    \emph{removed}. Before removing it, the algorithm records the
+    candidate path $P_{s\to u}\circ(u,v)\circ P_{v\to t}$; since
+    $d_G(s,u)\le d_G(s,v)$ and distances increase monotonically along
+    the two forward halves, this concatenation is always a simple
+    not-shortest path, and it is the cheapest path through $(u,v)$.
+\end{itemize}
+Strictly-backward back-edges ($d_G(s,u)>d_G(s,v)$) are layered-legal and
+kept. The result is a graph in which every back-edge goes strictly
+backward through the layers, and the answer to the original problem is
+the cheapest of the recorded candidates and whatever
+\textsc{NextSP-Layered} returns on the reduced graph.
+
+\section{The layered NSP algorithm}
+
+The core of the algorithm operates on an $(s,t)$-layered graph $G$ and is
+described as algorithm~\textsc{NextSP-Layered}.
+
+\paragraph{Back-edge decomposition.} For any not-shortest $s\to t$ path
+$P^{*}$, let the first back-edge of $P^{*}$ be $(A,?)$ and the last back-edge
+be $(?,B)$. Decompose $P^{*} = P_1^{*} \circ P_0^{*} \circ P_2^{*}$, where
+$P_1^{*}$ is the prefix of $P^{*}$ from $s$ to~$A$ (a forward path),
+$P_0^{*}$ runs from $A$ to $B$ and contains all back-edges of~$P^{*}$, and
+$P_2^{*}$ is the suffix from $B$ to~$t$ (a forward path). Lemma~5.2 of the
+paper shows that in a (strictly) $(s,t)$-layered graph one always has
+$d(B)<d(A)$ --- the back-edge region jumps strictly backward in layer ---
+and that every interior vertex $u$ of $P_0^{*}$ satisfies
+$d(B)<d(u)<d(A)$. This is why the enumeration below can restrict to
+$d(A)>d(B)$, and why a graph that is not \emph{strictly} layered (where a
+``back-edge'' might go forward in layer) breaks the algorithm.
+
+\paragraph{Lemma 5.3 (key structural lemma).} For any $s\to t$ NSP
+$P^{*}$ with $\text{BE-Decomp}(P^{*}) = (A,B; P_1^{*}, P_0^{*}, P_2^{*})$,
+there exist two edges $(X',X),(Y',Y)\in E$ at the same forward layer pair
+$\lambda(X')=\lambda(Y')=\lambda(X)-1=\lambda(Y)-1$ such that there is a
+pair of vertex-disjoint forward paths $(P_1,P_2)$ where $P_1$ runs from $s$
+to $A$ through $(X',X)$ and $P_2$ runs from $B$ to $t$ through $(Y',Y)$, and
+moreover $\bigl(V(P_0^{*})\setminus\{A,B\}\bigr)\cap\bigl(V(P_1)\cup
+V(P_2)\bigr) = \emptyset$.
+
+The lemma is the engine of the algorithm: by enumerating over the
+$6$-tuple $(A,B,X',X,Y',Y)$, the algorithm tries every potential
+decomposition, and for the correct one any feasible disjoint pair
+$(P_1,P_2)$ obtained by 2-VDP will leave the optimal middle $P_0^{*}$ intact
+in the residual graph, where a shortest $A\to B$ path search recovers its
+weight.
+
+\paragraph{Algorithm.} Initialize the best result $\widehat P\gets\bot$.
+For every $6$-tuple $(A,B,X',X,Y',Y)\in V^{6}$ with $d(A)>d(B)$,
+$A,B\in V_B(G)$ (vertices incident to a back-edge), $(X',X),(Y',Y)\in E$ and
+matching layers as above:
+\begin{enumerate}
+  \item Find two disjoint forward paths $P_1,P_2$ satisfying Lemma~5.3 using
+    a $2$-VDP-in-DAG subroutine.
+  \item In the subgraph $G\bigl[\bigl(V\setminus(V(P_1)\cup
+    V(P_2))\bigr)\cup\{A,B\}\bigr]$ find a shortest $A\to B$ path~$P_0$.
+  \item If $P_0\neq\bot$ and $w(P_1\circ P_0\circ P_2)<w(\widehat P)$, set
+    $\widehat P\gets P_1\circ P_0\circ P_2$.
+\end{enumerate}
+Return $\widehat P$.
+
+\section{Subroutines and complexity}
+
+The inner subroutine is \emph{$2$-vertex-disjoint paths in a directed acyclic
+graph} (2-VDP-in-DAG): given a DAG and two source-sink pairs $(s_1,t_1)$ and
+$(s_2,t_2)$, decide whether vertex-disjoint $s_1\to t_1$ and $s_2\to t_2$
+paths exist, and if so output them. Tholey~\cite{Tholey2012} solves this in
+$O(|V|+|E|)$ time. The CWZ paper uses Tholey's bound, yielding an overall
+complexity of $O(|V|^{4}|E|^{3}\log|V|)$.
+
+The paper notes explicitly that the bound is not optimized for practice:
+``Our focus was to obtain a polynomial-time algorithm rather than to optimize
+the running time.'' Several improvements --- avoiding edge subdivision,
+exploiting layer structure to prune the $6$-tuple loop --- are conjectured
+to give better runtime in practice. Chapter~\ref{ch:experiments} reports
+what runtime is actually observed.

@@ -1,5 +1,210 @@
 \chapter{Implementation}
+\label{ch:implementation}
 
-% TODO: C++20 / CMake; module layout; Graph data structure (adjacency list with
-% stable edge IDs); Dijkstra; shortest-path DAG; baselines (brute force, Yen-k2);
-% graph generators; testing strategy.
+\section{Language and build system}
+
+The implementation is in C++20, compiled with GCC~14.2 on Linux (WSL2).
+CMake~$\ge 3.20$ orchestrates the build. We deliberately keep external
+dependencies minimal: GoogleTest is fetched at configure time via
+\texttt{FetchContent}, the Python plotting tooling needs only
+\texttt{pandas}, \texttt{matplotlib}, and \texttt{numpy}, and nothing
+else is required on the path of the C++ binaries themselves. The choice
+of C++ over Python was driven by the high asymptotic complexity of the
+CWZ algorithm: even an $O(|V|^{4}|E|^{3})$ inner loop must run on graphs
+with $|V|\approx 30$--$50$ to give meaningful empirical data, and
+Python's interpretation overhead would limit the reachable size
+considerably.
+
+Edge weights are stored as 64-bit signed integers (\texttt{Weight =
+std::int64\_t}). The algorithm's edge classification compares
+\textit{exact} equalities like $d_S[u]+w(u,v)=d_S[v]$, which
+floating-point arithmetic would render unreliable. Generators emit
+weights uniformly drawn from $[1, 10]$.
+
+\section{Module layout}
+
+The source tree is split into small modules under \texttt{src/}:
+\texttt{graph/} (a directed graph with adjacency lists indexed by stable
+edge IDs and both out- and in-neighbour lists), \texttt{shortest\_path/}
+(Dijkstra forward and reverse, plus a routine to extract the
+shortest-path DAG), \texttt{two\_vdp/} (2-VDP-in-DAG via
+vertex-capacitated max-flow), \texttt{cwz/} (reductions and the layered
+NSP algorithm), \texttt{baseline/} (brute force and Yen), and
+\texttt{cli/} (a thin \texttt{nsp-cli} wrapper). Graph generators live
+under \texttt{generators/}; unit tests under \texttt{tests/unit/};
+correctness fuzzers under \texttt{tests/correctness/}; benchmarks and
+plotting under \texttt{bench/}.
+
+\section{Key data structures}
+
+The \texttt{Graph} class assigns a stable identifier to each edge at
+insertion time and exposes both \texttt{out\_edges(v)} and
+\texttt{in\_edges(v)} lists of edge IDs. Maintaining the reverse
+adjacency in parallel makes reverse Dijkstra a single pass over in-edges
+rather than a transpose-then-search operation, and it lets the layered
+algorithm classify each edge as forward/back-edge once and store the
+result on the side.
+
+For the residual subgraph $G[V\setminus U]$ used inside the layered
+algorithm we never materialize the subgraph; instead we run a
+vertex-masked Dijkstra that skips any edge whose endpoint lies in
+$U$. This avoids allocating an $O(|V|+|E|)$ subgraph for each of the
+many $(A,B)$ candidates explored.
+
+\section{Paper-faithful pipeline}
+\label{sec:pipeline}
+
+The top-level \texttt{cwz\_nsp(g, s, t)} runs the paper's three-stage
+pipeline:
+\begin{enumerate}
+  \item \texttt{reduce\_to\_straight(g, s, t)} (the paper's
+    \textsc{NextSP}) folds every off-shortest-path vertex, replacing it
+    with shortcut edges between its in- and out-neighbours, leaving an
+    $(s,t)$-straight graph;
+  \item \texttt{reduce\_to\_layered} (the paper's
+    \textsc{NextSP-Straight}) turns the straight graph into a
+    \emph{strictly} $(s,t)$-layered one and, as a by-product, records a
+    set of candidate NSP paths (see below);
+  \item \texttt{cwz\_nsp\_layered} (the paper's \textsc{NextSP-Layered})
+    runs the Lemma~5.3 $6$-tuple enumeration on the strictly layered
+    graph;
+  \item the answer is the cheapest among the recorded candidates and the
+    layered result, mapped back to original-graph edges via a
+    \texttt{path\_expand[]} table that each reduction maintains.
+\end{enumerate}
+
+\paragraph{\textsc{NextSP-Straight} removes violating back-edges and
+records candidates.} The subtle and important part is step~2. The
+paper's $(s,t)$-layered definition (Definition~4.1) requires that every
+back-edge go \emph{strictly backward} in layer. An $(s,t)$-straight
+graph can contain back-edges that go forward (or sideways) in distance
+--- an edge $(u,v)$ with $d_G(s,u)\le d_G(s,v)$ but
+$d_G(s,u)+w(u,v)>d_G(s,v)$. \textsc{NextSP-Straight} \emph{removes} each
+such edge, but first records the candidate path
+$P_{s\to u}\circ(u,v)\circ P_{v\to t}$ (shortest forward paths to $u$
+and from $v$), which the paper proves is always a valid simple
+not-shortest path. Forward edges that skip layers are subdivided through
+intermediate-distance vertices; strictly-backward back-edges are kept
+unchanged. The result is a graph in which \emph{every} back-edge is
+strictly backward --- exactly the structure Lemma~5.1 guarantees for an
+$(s,t)$-layered graph, and exactly the structure the layered enumeration
+relies on. Our implementation (\texttt{reduce\_to\_layered}) records the
+removed-edge candidates in \texttt{ReductionResult::candidates}, and
+\texttt{cwz\_nsp} folds them into the final minimum.
+
+\paragraph{Multi-edge cap (\boldmath$K=5$\unboldmath) --- the one
+approximation.} The paper's \textsc{NextSP} similarly records candidates
+for expensive routes through a folded off-SP vertex and then keeps only
+the single minimum-weight shortcut per vertex pair. Our
+\texttt{reduce\_to\_straight} does not yet implement that
+candidate-recording; instead it retains the $K$ cheapest distinct
+shortcut weights per ordered vertex pair, which approximates the same
+effect. Setting $K=1$ (pure minimum) makes the implementation miss
+NSPs --- we measured ${\sim}20\%$ of NSP-bearing instances missed --- so
+the extra weights are load-bearing. Without \emph{any} cap, dense
+Erd\H{o}s--R\'enyi inputs at $|V|\ge 16$ produced reduced graphs with
+hundreds of thousands of multi-edges (a Cartesian blow-up across fold
+steps) and exhausted memory. We use $K=5$: empirically it reproduces the
+brute-force NSP on every instance in our fuzz suite (over $35{,}000$
+trials, Section~\ref{sec:correctness}), while keeping the reduced graph
+small. This is the single place where our implementation is an
+empirically-validated approximation rather than a proven transcription;
+implementing \textsc{NextSP}'s candidate-recording would remove it.
+
+\section{The layered NSP algorithm}
+\label{sec:layered}
+
+\texttt{cwz\_nsp\_layered} is a direct transcription of
+\textsc{NextSP-Layered} (paper Section~5). It enumerates every
+$6$-tuple $(A,B,X',X,Y',Y)$ with $A,B$ incident to back-edges,
+$\lambda(X')=\lambda(Y')=\lambda(X)-1=\lambda(Y)-1$, and (implied by the
+layer constraints) $d(A)>d(B)$. For each tuple it finds the pair of
+vertex-disjoint forward paths $P_1=s\to X'\to X\to A$ and
+$P_2=B\to Y'\to Y\to t$ via two calls to the 2-VDP-in-DAG subroutine ---
+one for the layers below the barrier ($s\to X'$, $B\to Y'$) and one for
+the layers above ($X\to A$, $Y\to t$), which are automatically disjoint
+because forward paths are monotone in layer. It then completes the
+candidate with a shortest $A\to B$ path in the residual graph
+$G[(V\setminus(V(P_1)\cup V(P_2)))\cup\{A,B\}]$ and keeps the cheapest
+result. The Key Lemma (Lemma~5.3) guarantees this finds an NSP whenever
+one exists.
+
+The boundary cases $A=X$ (the upper part of $P_1$ is empty) and $B=Y'$
+(the lower part of $P_2$ is empty) are common on small graphs and must
+be admitted; an earlier version of our code excluded $B=Y'$ and required
+$\lambda(B)<L$ strictly, which caused it to miss NSPs whose first
+back-edge sits exactly one layer above its last. Correcting this to
+$\lambda(B)\le L$ and letting the 2-VDP calls reject infeasible tuples
+matches the paper and closed the gap.
+
+\paragraph{Development history and ablation.} An earlier iteration of
+this project ran \texttt{cwz\_nsp\_layered} on a non-strict layered
+graph (the reduction did not remove forward/sideways back-edges) and
+compensated with three extra back-edge-enumeration phases of our own
+design. An ablation exposed that this was \emph{not} faithful to the
+paper: with the extra phases disabled, the paper's $6$-tuple enumeration
+alone found \emph{zero} NSPs, because on a non-strict layered graph its
+structural preconditions never held. Rebuilding the reduction to produce
+a genuinely strict layered graph (as above) fixed the root cause: the
+$6$-tuple enumeration alone now reproduces the brute-force oracle on all
+$35{,}000+$ fuzz trials, and the extra phases were removed. The episode
+is a good argument for keeping a brute-force differential oracle: the
+hybrid had passed every test we had at the time, yet was solving the
+problem by a route the paper's correctness proof did not cover.
+
+\section{The 2-VDP subroutine}
+
+We solve 2-VDP-in-DAG by reduction to a max-flow problem. Each vertex
+is split in two with a capacity-1 edge between the halves; each DAG
+edge becomes a capacity-1 edge in the flow network. A super-source and
+super-sink connect to the prescribed sources $\{s_1,s_2\}$ and sinks
+$\{t_1,t_2\}$ respectively. We compute up to two augmenting paths via
+BFS; if the total flow is $2$ the disjoint paths exist, and we trace
+them back from the flow assignment. This costs $O(|V|+|E|)$ per BFS, so
+$O(|V|+|E|)$ per 2-VDP call --- the same asymptotic class as Tholey's
+linear-time bound~\cite{Tholey2012}, with a higher constant factor but
+substantially simpler code.
+
+An earlier version of this code used a vertex-split capacity of $2$ at
+the four prescribed endpoints. We discovered (and recorded as a unit
+test in \texttt{tests/unit/test\_two\_vdp.cpp}) that this is incorrect:
+the higher capacity allows max-flow to accept some infeasible 2-VDP
+instances, and the wrong verdict only fails to leak past the
+flow-decomposition step by accident. The current implementation uses
+capacity $1$ uniformly, matching the standard reduction.
+
+\section{Testing strategy}
+\label{sec:correctness}
+
+The project ships:
+\begin{itemize}
+  \item $68$ unit tests covering the graph data structure, both
+    Dijkstras, the shortest-path DAG, 2-VDP (including the
+    capacity-$1$ regression test), both reductions (including that
+    \textsc{NextSP-Straight} removes forward/sideways back-edges and
+    records the right candidates), the layered NSP algorithm on
+    hand-built examples, both baselines, and the end-to-end
+    \texttt{cwz\_nsp} pipeline. All pass.
+  \item A property-based fuzz \texttt{fuzz\_brute\_vs\_yen} that
+    confirms brute force and Yen's NSP heuristic agree on cost across
+    thousands of random small graphs (mismatches would indicate a bug
+    in either side).
+  \item A differential fuzz \texttt{fuzz\_cwz\_vs\_brute} that confirms
+    the full CWZ pipeline matches brute force. We measured \emph{zero}
+    mismatches across more than $35{,}000$ random trials: $|V|\le 10$
+    over $30$ seeds ($30{,}000$ trials), $|V|\le 12$ over $9$ seeds, and
+    $|V|\le 14$ over $3$ seeds.
+\end{itemize}
+
+The combined test suite establishes correctness on small graphs;
+agreement with Yen on every benchmark instance
+(Section~\ref{sec:agreement}) extends the empirical guarantee through
+$|V|=50$.
+
+\section{The CLI}
+
+\texttt{nsp-cli} reads a graph from a DIMACS-style text file (first line
+$n\;m$, then $m$ lines of $u\;v\;w$) and runs the selected algorithm.
+Source and sink default to vertex $0$ and vertex $n-1$. The output is
+one \texttt{nsp\_cost} line and a list of edges describing the recovered
+NSP.

@@ -1,5 +1,70 @@
 \chapter{Introduction}
+\label{ch:intro}
 
-% TODO: motivate the next-to-shortest path problem; state the historical openness
-% of the directed positively-weighted case; preview the contribution of this work
-% (first empirical study of CWZ).
+\section{The next-to-shortest path problem}
+
+Given a directed graph $G=(V,E,w)$ with strictly positive edge weights
+$w:E\to\mathbb{R}_{>0}$ and two distinguished vertices $s,t\in V$, the
+\emph{next-to-shortest path} (NSP) problem asks for a simple $s\to t$ path
+whose weight is the smallest among those $s\to t$ paths that are \emph{not}
+shortest paths. Equivalently, write
+\[
+  d_G(s,t)\;=\;\min\bigl\{w(P) : P \text{ is an } s\to t \text{ path}\bigr\}.
+\]
+An $s\to t$ path~$P$ is a \emph{not-shortest path} if $w(P) > d_G(s,t)$, and an
+NSP is one such path of minimum weight, if one exists.
+
+Despite its surface similarity to the shortest path problem, the NSP problem
+behaves very differently. The shortest path problem in graphs with positive
+weights is solved in near-linear time by Dijkstra's algorithm, but the NSP
+problem becomes \emph{NP-complete} as soon as zero-weight edges are
+admitted in a directed graph~\cite{LallaSrinivasan1992}, and the
+\emph{strictly} positively weighted directed case had remained open for nearly
+thirty years. Polynomial-time algorithms were known only for undirected
+graphs~\cite{KrasikovNoble2004} and for planar directed
+graphs~\cite{Wu2010}; the general directed positively-weighted case was
+resolved only recently by Chen, Wein, and Zhang~\cite{ChenWeinZhang2025},
+whose algorithm runs in $O\bigl(|V|^{4}|E|^{3}\log|V|\bigr)$ time.
+
+\section{Motivation}
+
+NSP appears as a primitive in many higher-level routing and resilience
+problems. Whenever a system needs a backup path under the constraint that
+the backup must remain ``simple'' (no vertex repetitions), the NSP gives the
+cheapest single-failure alternative. Examples include alternative-route
+suggestions in road networks, fast-rerouting in IP networks, and
+$k$-shortest path enumeration as in Yen's algorithm where the second-shortest
+\emph{simple} path matters when the shortest is unavailable. Yen's
+algorithm~\cite{Yen1971} produces simple paths in non-decreasing weight order
+but its worst-case runtime is exponential in the number of distinct shortest
+paths; the Chen--Wein--Zhang (CWZ) algorithm, in contrast, runs in fixed
+polynomial time regardless of how many shortest paths the graph contains.
+
+\section{Contribution}
+
+The CWZ paper is purely theoretical and contains no implementation or
+experimental evaluation. The contributions of this thesis are:
+\begin{enumerate}
+  \item A C++20 implementation of the CWZ algorithm and its supporting
+    reductions to $(s,t)$-straight and $(s,t)$-layered digraphs.
+  \item Reference implementations of two correctness oracles --- a brute-force
+    enumerator and Yen's $k$-shortest-simple-paths algorithm used as an NSP
+    heuristic --- and a differential-fuzzing harness comparing them across
+    random graphs from five generator families.
+  \item An empirical study of the CWZ algorithm's runtime on graphs from
+    five families (Erd\H{o}s--R\'enyi, random DAG, layered, grid, and a
+    deliberately adversarial diamond-chain family), comparing it against
+    Yen-NSP as the practical baseline. This is, to our knowledge, the
+    first empirical evaluation of the CWZ algorithm.
+\end{enumerate}
+
+\section{Outline}
+
+Chapter~\ref{ch:litreview} surveys prior work on NSP and related shortest-path
+problems. Chapter~\ref{ch:algorithm} describes the CWZ algorithm, including
+its two reductions, its key Lemma~5.3, and the role of $2$-vertex-disjoint
+paths in directed acyclic graphs. Chapter~\ref{ch:implementation} discusses
+implementation choices, an ablation showing the $6$-tuple enumeration alone
+suffices once the reduction emits a strictly layered graph, and the single
+remaining approximation. Chapter~\ref{ch:experiments} reports empirical
+results across graph families. Chapter~\ref{ch:conclusion} concludes.

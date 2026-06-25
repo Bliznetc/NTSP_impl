@@ -1,4 +1,297 @@
 \chapter{Experiments}
+\label{ch:experiments}
 
-% TODO: graph families; runtime scaling; comparison to Yen-k2 (heuristic
-% success rate and runtime); profiling and dominant phases; discussion.
+\section{Methodology}
+
+We benchmark three algorithms --- brute-force NSP, Yen-NSP, and our
+implementation of the Chen--Wein--Zhang (CWZ) algorithm --- on graphs
+drawn from five generator families:
+\begin{itemize}
+  \item Erd\H{o}s--R\'enyi random digraphs $G_{n,p}$ with $p=0.30$;
+  \item random DAGs (vertices in topological order; each forward edge
+    present with probability $p=0.30$);
+  \item layered digraphs (two endpoint vertices $s$, $t$ plus $L$ interior
+    layers of width $W$, with forward-edge probability $p_f=0.40$ and
+    back-edge probability $p_b=0.10$);
+  \item grid digraphs (rows-by-columns lattice with rightward and downward
+    edges only);
+  \item \emph{diamond-chain} digraphs, a deliberately adversarial family
+    described in Section~\ref{sec:adversarial}.
+\end{itemize}
+
+For each family we sweep $|V|\in\{6,8,10,12,16,20,25,30,40,50\}$, drawing
+$20$ instances per size with deterministic seeds. Brute force is capped at
+$|V|\le 13$ (an exponential safety net); both Yen and CWZ run at
+$|V|\le 60$. Each algorithm call is wrapped in a $30$-second wall-clock
+budget; calls that exceed it are recorded as ``budget exceeded'' and
+excluded from the timing aggregates. Edge weights are integers drawn
+uniformly from $[1,10]$. All three algorithms are implemented in C++20,
+compiled at \texttt{-O3}, and timed with wall-clock measurements taken
+\emph{around the algorithm call only} (graph generation excluded). The
+benchmark binary (\texttt{build/bench}) writes one CSV row per
+$\langle\text{algorithm},\text{family},|V|,\text{trial}\rangle$ and the
+plots are produced by \texttt{bench/plots/make\_plots.py}.
+
+For each $(\text{family},|V|)$ cell we report the \emph{median} runtime
+across the $20$ trials. Plots additionally show the inter-quartile range
+($25^{\text{th}}$--$75^{\text{th}}$ percentile) as a shaded band around
+the median, which is robust to single-trial outliers and to the
+heavy-tailed runtimes that appear on dense Erd\H{o}s--R\'enyi instances.
+
+\section{Runtime by family and size}
+
+Figure~\ref{fig:runtime} shows the runtime breakdown by family, with one
+sub-panel per family. The vertical axis is logarithmic and the shaded
+band around each line is the IQR. Three observations stand out.
+
+\paragraph{All three algorithms are fast on the benign families.}
+Even at $|V|=50$, CWZ on the densest family (Erd\H{o}s--R\'enyi) has a
+median of $60$~ms. Brute force, despite its exponential worst case, is
+fast on the small inputs we feed it ($|V|\le 13$): on most instances no
+NSP exists and the DFS prunes quickly. Yen is extremely fast across the
+entire range we tested on the four random families, finishing in tens of
+microseconds at $|V|=50$.
+
+\paragraph{CWZ's runtime is family-sensitive.} On Erd\H{o}s--R\'enyi
+graphs the median grows from $54$~\textmu s at $|V|=10$ to $60$~ms at
+$|V|=50$, a four-orders-of-magnitude climb driven by the number of
+back-edges that the inner enumeration must consider. On the random-DAG
+family the same sweep climbs only from $9$~\textmu s to $1$~ms because
+DAGs lack the dense back-edge structure of $G_{n,p}$. Layered and grid
+graphs sit in between.
+
+\paragraph{Yen dominates on the four random families.} For the input
+distributions we tested, Yen-NSP terminates orders of magnitude faster
+than CWZ. This is the expected behaviour on graphs where the number of
+distinct simple shortest paths is small: Yen only has to step past a
+handful of paths before finding one with strictly greater weight, while
+CWZ pays its polynomial price uniformly. The interest of CWZ is precisely
+in \emph{worst-case} polynomiality --- it is the only algorithm with a
+fixed polynomial bound regardless of how many shortest paths the graph
+contains. The next subsection shows that worst-case behaviour
+empirically.
+
+\paragraph{The diamond-chain panel inverts the picture.} The rightmost
+sub-panel of Figure~\ref{fig:runtime} shows the same axes for the
+diamond-chain family. Yen's curve climbs steeply --- from microseconds
+at $|V|=10$ to $1.58$~s at $|V|=50$ --- while the CWZ curve stays
+microsecond-flat at $68$~\textmu s. This is the empirical face of the
+$2^k$ blow-up Yen must endure on graphs with exponentially many shortest
+paths, against which CWZ's polynomial bound is the only protection.
+
+\begin{figure}
+  \centering
+  \includegraphics[width=\textwidth]{../results/runtime_by_family.pdf}
+  \caption{Median runtime versus $|V|$ across families (log $y$-axis), with
+    inter-quartile range shaded. Each family is a sub-panel; the rightmost
+    diamond-chain panel inverts the brute-vs-Yen-vs-CWZ ordering visible in
+    the other four. Twenty trials per $(\text{family},|V|)$ cell.}
+  \label{fig:runtime}
+\end{figure}
+
+\section{CWZ scaling}
+
+Figure~\ref{fig:scaling} shows the CWZ median runtime alone on a log-log
+scale, with all five families overlaid. A power-law fit gives slopes in
+the range $\approx 2$--$3$ depending on family, well below the
+$|V|^{4}|E|^{3}$ paper bound (slope $\approx 7$ in $\log|V|$ when
+$|E|=\Theta(|V|)$). This indicates that the inner enumeration of our
+implementation prunes aggressively in practice on these inputs.
+
+\begin{figure}
+  \centering
+  \includegraphics[width=0.85\textwidth]{../results/cwz_scaling.pdf}
+  \caption{CWZ median runtime on a log-log scale, all five families.}
+  \label{fig:scaling}
+\end{figure}
+
+\section{Agreement between algorithms}
+\label{sec:agreement}
+
+On every benchmark instance where Yen and CWZ both produced a finite NSP,
+their reported NSP cost was identical. The script
+\texttt{bench/plots/make\_plots.py} emits
+\texttt{results/agreement\_summary.csv} which records, per
+$(\text{family},|V|)$ cell, how many of the $20$ trials had matching NSP
+costs between the two algorithms. Agreement is $100\%$ on the four benign
+families across the whole sweep, and on the diamond-chain family up to
+$|V|=30$.
+
+The only cells with less than full agreement are the two largest
+diamond-chain sizes, $|V|=40$ and $|V|=50$ --- and there it is
+\emph{Yen}, not CWZ, that is wrong. On those instances the number of
+distinct shortest paths ($2^{k}$ with $k\ge 13$) exceeds Yen's
+enumeration cap $k_{\max}=5000$, so Yen exhausts its budget and reports
+``no NSP'' even though one exists. CWZ returns the correct NSP (cost
+$2k+1$) in tens of microseconds on the same instances. This is a sharper
+form of the adversarial story of Section~\ref{sec:adversarial}: a
+capped Yen does not merely run slowly on graphs with exponentially many
+shortest paths, it silently returns the wrong answer.
+
+This agreement check is complementary to the fuzz harness of
+Chapter~\ref{ch:implementation}: not only does our CWZ implementation
+match the brute-force oracle on small inputs, it matches Yen on every
+benign instance and \emph{beats} Yen (matching brute force) on the
+adversarial instances where Yen's cap fails.
+
+\begin{table}
+  \centering
+  \begin{tabular}{lrrr}
+  \toprule
+  family & $|V|$ range & trials per cell & agree \\
+  \midrule
+  Erd\H{o}s--R\'enyi & 6--50 & 20 / size & 100\% \\
+  random DAG        & 6--50 & 20 / size & 100\% \\
+  layered           & 6--50 & 20 / size & 100\% \\
+  grid              & 6--50 & 20 / size & 100\% \\
+  diamond chain     & 6--30 & 20 / size & 100\% \\
+  diamond chain     & 40--50 & 20 / size & Yen capped$^{*}$ \\
+  \bottomrule
+  \end{tabular}
+  \caption{CWZ vs Yen agreement on benchmark instances. The summary CSV
+    \texttt{results/agreement\_summary.csv} carries the per-cell
+    breakdown. $^{*}$On diamond chains at $|V|\ge 40$ Yen exceeds its
+    $k_{\max}=5000$ enumeration cap and reports no NSP; CWZ returns the
+    correct NSP, matching brute force, in tens of microseconds.}
+  \label{tab:agreement}
+\end{table}
+
+\section{NSP existence}
+
+A practical caveat in interpreting Figure~\ref{fig:runtime}: on a notable
+fraction of generated instances no NSP exists at all (the graph contains
+only one simple $s\to t$ path, or none). Figure~\ref{fig:existence}
+reports the fraction of generated instances on which Yen-NSP reported an
+NSP. Layered and grid families are denser in NSP-existing instances;
+sparse Erd\H{o}s--R\'enyi instances at small $|V|$ frequently have no
+NSP. The diamond-chain family always has exactly one NSP (the shortcut
+edge), and the curve sits at $1.0$ across the sweep.
+
+\begin{figure}
+  \centering
+  \includegraphics[width=0.75\textwidth]{../results/nsp_existence.pdf}
+  \caption{Fraction of generated instances on which an NSP exists.}
+  \label{fig:existence}
+\end{figure}
+
+\section{Adversarial inputs: where CWZ wins}
+\label{sec:adversarial}
+
+The diamond-chain family in Section~3.1 (which already appears as the
+right-most panel of Figure~\ref{fig:runtime}) is repeated here with a
+dedicated sweep over $k$ to make the $2^{k}$ scaling visible at higher
+resolution.
+
+\paragraph{Diamond-chain construction.} For a parameter $k$ we build a
+layered digraph as follows. Vertex $0$ is $s$. For each $i\in\{1,\dots,k\}$
+we add three vertices: $\text{top}_i$, $\text{bot}_i$, and $\text{merge}_i$;
+$\text{merge}_k$ is $t$. Set $\text{merge}_0\equiv s$. For each $i$, add
+four unit-weight edges:
+$\text{merge}_{i-1}\to\text{top}_i$, $\text{merge}_{i-1}\to\text{bot}_i$,
+$\text{top}_i\to\text{merge}_i$, and $\text{bot}_i\to\text{merge}_i$.
+Finally add a direct edge $s\to t$ of weight $2k+1$.
+
+The construction has $1+3k$ vertices, $4k+1$ edges, and exactly $2^{k}$
+distinct simple shortest $s\to t$ paths (each of weight $2k$). The unique
+NSP is the direct $s\to t$ shortcut of weight $2k+1$.
+
+\paragraph{Yen's exponential blowup.} On this family Yen must enumerate
+all $2^{k}$ shortest simple paths before reaching the NSP.
+Table~\ref{tab:adv} shows the measured runtimes from the dedicated
+\texttt{build/bench\_adversarial} sweep; Figure~\ref{fig:adversarial}
+plots them.
+
+\begin{table}
+  \centering
+  \begin{tabular}{rrrrr}
+  \toprule
+  $k$ & $|V|$ & $|E|$ & Yen (s) & CWZ (s) \\
+  \midrule
+  10 & 31 & 41 & 0.021 & 0.000114 \\
+  12 & 37 & 49 & 0.374 & 0.000042 \\
+  14 & 43 & 57 & 11.23 & 0.000874 \\
+  15 & 46 & 61 & 58.65 & 0.001441 \\
+  20 & 61 & 81 & ---   & 0.000026 \\
+  24 & 73 & 97 & ---   & 0.000032 \\
+  \bottomrule
+  \end{tabular}
+  \caption{Diamond-chain adversarial benchmark. Yen-NSP must enumerate
+    all $2^{k}$ shortest paths and was halted after exceeding the
+    $30$~s budget at $k=15$ (recorded budget overflow:
+    $59$~s). CWZ stays sub-millisecond across the full sweep.}
+  \label{tab:adv}
+\end{table}
+
+\begin{figure}
+  \centering
+  \includegraphics[width=0.8\textwidth]{../results/adversarial.pdf}
+  \caption{Adversarial diamond-chain: Yen-NSP doubles in runtime per
+    increment of $k$ (a $2^{k}$ trend) while CWZ stays microsecond-fast.}
+  \label{fig:adversarial}
+\end{figure}
+
+Between $k=10$ and $k=15$, Yen's runtime grows from $0.021$~s to
+$59$~s --- consistent with the $2^{k}$ scaling we expected: each
+increment of $k$ doubles the number of shortest paths Yen has to
+enumerate before finding a strictly longer one. CWZ, in contrast, finds
+the NSP in microseconds across the full sweep because the graph contains
+exactly one back-edge (the $s\to t$ shortcut). That edge goes forward in
+distance, so \textsc{NextSP-Straight} removes it and records it as a
+single candidate (Section~\ref{sec:pipeline}); the answer is found in
+constant work after the initial Dijkstra, with the $6$-tuple enumeration
+never firing.
+
+At $k=15$ the ratio is
+$58.65~\text{s} / 1.44~\text{ms} \approx 41{,}000\times$ in favour of
+CWZ. Past $k=15$ Yen is too slow for our budget; CWZ continues to run
+unimpeded up to $k=24$ ($|V|=73$) in tens of microseconds.
+
+\paragraph{Significance.} This is the empirical fact CWZ's worst-case
+polynomial bound is buying. On any input where the simple heuristic
+blows up, the polynomial-time algorithm continues to terminate quickly.
+The \emph{benign-random} comparison in the previous sections must be
+read in light of this: Yen is faster in practice on random inputs
+because the adversarial structure does not arise by accident, but it
+cannot be relied on as a worst-case solver. The diamond-chain panel of
+Figure~\ref{fig:runtime} shows the same reversal in the routine
+benchmark, side-by-side with the four benign families.
+
+\section{Threats to validity}
+
+\begin{itemize}
+  \item Our 2-VDP-in-DAG subroutine is a max-flow-based implementation
+    rather than Tholey's linear-time
+    algorithm~\cite{Tholey2012}. Both have the same asymptotic
+    $O(|V|+|E|)$ bound, but the constant factor differs; we have not
+    measured the gap.
+  \item Our reduction to $(s,t)$-straight (\texttt{reduce\_to\_straight}
+    in \texttt{src/cwz/reductions.cpp}) caps each multi-edge family at
+    $K=5$ distinct weights per (source, destination) pair after each
+    fold (Section~\ref{sec:pipeline}). This is the one place where our
+    implementation is an empirically-validated approximation rather than
+    a proven transcription: the paper's \textsc{NextSP} instead records
+    candidates for expensive routes through a folded vertex and keeps
+    only the minimum shortcut. We confirmed that $K=1$ (pure minimum)
+    misses NSPs, that no cap exhausts memory on dense inputs, and that
+    $K=5$ reproduces the brute-force NSP on all $35{,}000+$ fuzz trials.
+    A pathological input whose only NSP needs the $6^{\text{th}}$ or
+    later cheapest shortcut weight cannot be ruled out a priori;
+    implementing \textsc{NextSP}'s candidate-recording would close this.
+  \item The layered solver (\texttt{cwz\_nsp\_layered}) is a direct
+    transcription of the paper's \textsc{NextSP-Layered}: the single
+    $6$-tuple enumeration of Lemma~5.3, on a strictly $(s,t)$-layered
+    graph, with the removed-back-edge candidates supplied by the
+    reduction. An ablation (Chapter~\ref{ch:implementation}) confirms
+    that this enumeration \emph{alone} reproduces the brute-force oracle
+    on all $35{,}000+$ trials; an earlier, non-faithful hybrid that
+    leaned on extra home-grown phases was removed once the reduction was
+    corrected to emit a genuinely strict layered graph.
+  \item The generator families we sweep --- excluding diamond-chain ---
+    are benign: none deliberately constructs many alternate shortest
+    paths to stress Yen. The dedicated diamond-chain sweep
+    (Section~\ref{sec:adversarial}) addresses this gap directly.
+  \item Twenty trials per cell is a moderate sample. The IQR bands on
+    Figure~\ref{fig:runtime} expose the variance; on Erd\H{o}s--R\'enyi
+    at large $|V|$ the band spans roughly a factor of two around the
+    median, while on grid and random-DAG it is much tighter.
+\end{itemize}

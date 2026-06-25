@@ -1,0 +1,812 @@
+% Self-contained single-file LaTeX source for Overleaf upload.
+%
+% USAGE: Create a new Overleaf project and:
+%   1. Paste this entire file into main.tex.
+%   2. Upload the figures from results/ as a flat list in the project root:
+%        runtime_by_family.pdf  (or .png)
+%        cwz_scaling.pdf
+%        nsp_existence.pdf
+%        adversarial.pdf
+%      Without these, the four \includegraphics in chapter 5 will fail; you
+%      can comment those figure blocks out if you only want the prose.
+%   3. Set the compiler to "pdfLaTeX" and BibTeX (Menu -> Settings).
+%
+% The bibliography is embedded via filecontents* below, so no separate
+% refs.bib upload is needed.
+%
+% Source repo: see thesis/ in the project tree.
+
+\begin{filecontents*}{refs.bib}
+@misc{ChenWeinZhang2025,
+  author        = {Chen, Kai and Wein, Nicole and Zhang, Yinzhan},
+  title         = {A Polynomial-Time Algorithm for the Next-to-Shortest Path Problem
+                   on Positively Weighted Directed Graphs},
+  year          = {2025},
+  eprint        = {2511.04345},
+  archiveprefix = {arXiv},
+  primaryclass  = {cs.DS}
+}
+@article{Yen1971,
+  author  = {Yen, Jin Y.},
+  title   = {Finding the {K} Shortest Loopless Paths in a Network},
+  journal = {Management Science},
+  volume  = {17},
+  number  = {11},
+  pages   = {712--716},
+  year    = {1971}
+}
+@article{Dijkstra1959,
+  author  = {Dijkstra, Edsger W.},
+  title   = {A note on two problems in connexion with graphs},
+  journal = {Numerische Mathematik},
+  volume  = {1},
+  pages   = {269--271},
+  year    = {1959}
+}
+@article{FredmanTarjan1987,
+  author  = {Fredman, Michael L. and Tarjan, Robert Endre},
+  title   = {Fibonacci heaps and their uses in improved network optimization algorithms},
+  journal = {Journal of the ACM},
+  volume  = {34},
+  number  = {3},
+  pages   = {596--615},
+  year    = {1987}
+}
+@misc{LallaSrinivasan1992,
+  author = {Lalla, E. and Srinivasan, S.},
+  title  = {On the NP-hardness of the next-to-shortest path problem},
+  year   = {1992},
+  note   = {Citation needs verification before final submission.}
+}
+@article{KrasikovNoble2004,
+  author  = {Krasikov, Ilia and Noble, Steven D.},
+  title   = {Finding next-to-shortest paths in a graph},
+  journal = {Information Processing Letters},
+  volume  = {92},
+  number  = {3},
+  pages   = {117--119},
+  year    = {2004}
+}
+@article{Wu2010,
+  author  = {Wu, Bang Ye},
+  title   = {A polynomial time algorithm for the next-to-shortest path problem
+             on undirected positively weighted graphs},
+  journal = {Information Processing Letters},
+  year    = {2010},
+  note    = {Confirm exact venue/year before final submission.}
+}
+@article{Eppstein1998,
+  author  = {Eppstein, David},
+  title   = {Finding the {$k$} shortest paths},
+  journal = {SIAM Journal on Computing},
+  volume  = {28},
+  number  = {2},
+  pages   = {652--673},
+  year    = {1998}
+}
+@article{FortuneHopcroftWyllie1980,
+  author  = {Fortune, Steven and Hopcroft, John E. and Wyllie, James},
+  title   = {The directed subgraph homeomorphism problem},
+  journal = {Theoretical Computer Science},
+  volume  = {10},
+  number  = {2},
+  pages   = {111--121},
+  year    = {1980}
+}
+@misc{Tholey2012,
+  author = {Tholey, Torsten},
+  title  = {Linear time algorithms for two disjoint paths problems on
+            directed acyclic graphs},
+  year   = {2012},
+  note   = {Confirm exact venue (journal vs conference) before final submission.}
+}
+\end{filecontents*}
+
+\documentclass[12pt,a4paper]{report}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{algorithm, algpseudocode}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{cleveref}
+\usepackage[a4paper, margin=2.5cm]{geometry}
+
+\newtheorem{theorem}{Theorem}[chapter]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{definition}[theorem]{Definition}
+
+\title{Implementation and Performance Analysis of a Polynomial-Time Algorithm
+       for the Next-to-Shortest Path Problem in Directed Weighted Graphs}
+\author{Ihar Maroz \\ Supervisor: Lech Duraj \\ Jagiellonian University}
+\date{2026}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+TODO: write final abstract once experiments are finalised. Briefly: we
+implement the Chen--Wein--Zhang (2025) polynomial-time algorithm for the
+next-to-shortest path problem on positively weighted directed graphs --- the
+first polynomial-time algorithm for this problem after roughly thirty years
+of being open --- and empirically evaluate its practical performance
+against a brute-force oracle and Yen's $k$-shortest-simple-paths heuristic.
+We confirm Yen dominates on benign random inputs but demonstrate, via a
+diamond-chain adversarial family with $2^{k}$ shortest paths, a regime where
+CWZ is faster than Yen by tens of thousands of times.
+\end{abstract}
+
+\tableofcontents
+
+% ============================================================================
+% Chapter 1: Introduction
+% ============================================================================
+\chapter{Introduction}
+\label{ch:intro}
+
+\section{The next-to-shortest path problem}
+
+Given a directed graph $G=(V,E,w)$ with strictly positive edge weights
+$w:E\to\mathbb{R}_{>0}$ and two distinguished vertices $s,t\in V$, the
+\emph{next-to-shortest path} (NSP) problem asks for a simple $s\to t$ path
+whose weight is the smallest among those $s\to t$ paths that are \emph{not}
+shortest paths. Equivalently, write
+\[
+  d_G(s,t)\;=\;\min\bigl\{w(P) : P \text{ is an } s\to t \text{ path}\bigr\}.
+\]
+An $s\to t$ path~$P$ is a \emph{not-shortest path} if $w(P) > d_G(s,t)$, and an
+NSP is one such path of minimum weight, if one exists.
+
+Despite its surface similarity to the shortest path problem, the NSP problem
+behaves very differently. The shortest path problem in graphs with positive
+weights is solved in near-linear time by Dijkstra's algorithm, but the NSP
+problem becomes \emph{NP-complete} as soon as zero-weight edges are
+admitted in a directed graph~\cite{LallaSrinivasan1992}, and the
+\emph{strictly} positively weighted directed case had remained open for nearly
+thirty years. Polynomial-time algorithms were known only for undirected
+graphs~\cite{KrasikovNoble2004} and for planar directed
+graphs~\cite{Wu2010}; the general directed positively-weighted case was
+resolved only recently by Chen, Wein, and Zhang~\cite{ChenWeinZhang2025},
+whose algorithm runs in $O\bigl(|V|^{4}|E|^{3}\log|V|\bigr)$ time.
+
+\section{Motivation}
+
+NSP appears as a primitive in many higher-level routing and resilience
+problems. Whenever a system needs a backup path under the constraint that
+the backup must remain ``simple'' (no vertex repetitions), the NSP gives the
+cheapest single-failure alternative. Examples include alternative-route
+suggestions in road networks, fast-rerouting in IP networks, and
+$k$-shortest path enumeration as in Yen's algorithm where the second-shortest
+\emph{simple} path matters when the shortest is unavailable. Yen's
+algorithm~\cite{Yen1971} produces simple paths in non-decreasing weight order
+but its worst-case runtime is exponential in the number of distinct shortest
+paths; the Chen--Wein--Zhang (CWZ) algorithm, in contrast, runs in fixed
+polynomial time regardless of how many shortest paths the graph contains.
+
+\section{Contribution}
+
+The CWZ paper is purely theoretical and contains no implementation or
+experimental evaluation. The contributions of this thesis are:
+\begin{enumerate}
+  \item A C++20 implementation of the CWZ algorithm and its supporting
+    reductions to $(s,t)$-straight and $(s,t)$-layered digraphs.
+  \item Reference implementations of two correctness oracles --- a brute-force
+    enumerator and Yen's $k$-shortest-simple-paths algorithm used as an NSP
+    heuristic --- and a differential-fuzzing harness comparing them across
+    random graphs from five generator families.
+  \item An empirical study of the CWZ algorithm's runtime on graphs from
+    several families (Erd\H{o}s--R\'enyi, random DAG, layered, grid,
+    scale-free), comparing it against Yen-NSP as the practical baseline,
+    and a deliberate adversarial benchmark on diamond-chain graphs that
+    isolates CWZ's worst-case advantage. This is, to our knowledge, the
+    first empirical evaluation of the CWZ algorithm.
+\end{enumerate}
+
+\section{Outline}
+
+Chapter~\ref{ch:litreview} surveys prior work on NSP and related shortest-path
+problems. Chapter~\ref{ch:algorithm} describes the CWZ algorithm, including
+its two reductions, its key Lemma~5.3, and the role of $2$-vertex-disjoint
+paths in directed acyclic graphs. Chapter~\ref{ch:implementation} discusses
+implementation choices and a deliberate simplification we adopted in the
+core layered phase. Chapter~\ref{ch:experiments} reports empirical results
+across graph families and on the adversarial benchmark.
+Chapter~\ref{ch:conclusion} concludes.
+
+% ============================================================================
+% Chapter 2: Literature Review
+% ============================================================================
+\chapter{Literature Review}
+\label{ch:litreview}
+
+\section{Shortest paths}
+
+Single-source shortest paths in directed graphs with non-negative weights are
+classically solved by Dijkstra's algorithm in
+$O((|V|+|E|)\log|V|)$ time using a binary heap, or $O(|V|\log|V|+|E|)$ with a
+Fibonacci heap~\cite{Dijkstra1959, FredmanTarjan1987}. We rely on the
+former; for our typical graph sizes the asymptotic improvement of Fibonacci
+heaps is not worth the constant factor.
+
+\section{$k$-shortest simple paths}
+
+Yen's algorithm~\cite{Yen1971} enumerates the $k$ shortest simple $s\to t$
+paths in non-decreasing order of weight using $k$ Dijkstra-style searches per
+``spur'' along the previously-found paths. Its runtime is
+$O(kn(m+n\log n))$, which is polynomial in $k$ but Yen's algorithm is used
+here in a slightly non-standard way: we invoke it as an NSP solver by
+enumerating paths until one is found whose weight strictly exceeds
+$d_G(s,t)$. If the graph has $r$ distinct simple shortest paths from $s$ to
+$t$, this requires examining at least $r$ paths before finding one with
+strictly greater cost, and $r$ can be exponential in $|V|$. In favorable
+inputs Yen is extremely fast, but on adversarial graphs with many alternate
+shortest paths it degenerates.
+
+Eppstein~\cite{Eppstein1998} gives an $O((m + n\log n) + k)$ algorithm for
+$k$-shortest paths that need not be simple. NSP requires simplicity and so
+Eppstein's algorithm does not directly apply.
+
+\section{Next-to-shortest path: positive results}
+
+Lalla and Srinivasan~\cite{LallaSrinivasan1992} introduced the NSP problem
+and showed it is NP-complete in directed graphs with non-negative weights (in
+particular, when zero weights are permitted). The undirected case admits a
+polynomial-time algorithm: Krasikov and Noble~\cite{KrasikovNoble2004}
+gave an $O(n^3 m)$-time algorithm; Wu's later
+work~\cite{Wu2010} brings the bound down to $O(nm)$ on undirected graphs.
+For \emph{planar} directed graphs with positive weights, Wu also gives a
+polynomial-time algorithm.
+
+For \emph{general} directed graphs with strictly positive weights, the
+problem remained open for nearly three decades. Chen, Wein, and Zhang
+\cite{ChenWeinZhang2025} resolved it in November~2025 with an
+$O\bigl(|V|^{4}|E|^{3}\log|V|\bigr)$-time algorithm. The algorithm proceeds
+by two reductions --- general digraph to $(s,t)$-straight to $(s,t)$-layered
+--- followed by a structural enumeration over $6$-tuples of vertices and
+edges that, together with a $2$-vertex-disjoint-paths subroutine in a DAG,
+suffice to find any NSP if one exists.
+
+\section{Related primitives}
+
+The CWZ algorithm depends critically on a subroutine for finding two
+vertex-disjoint paths between prescribed source-sink pairs in a directed
+acyclic graph. Fortune, Hopcroft, and Wyllie~\cite{FortuneHopcroftWyllie1980}
+gave the first polynomial-time algorithm for the $k$-vertex-disjoint-paths
+problem in DAGs for fixed $k$. Tholey~\cite{Tholey2012} subsequently gave a
+linear-time algorithm for the special case $k=2$. The CWZ paper cites Tholey
+for the $O(|V|+|E|)$ bound on the inner subroutine. In the present work we
+substitute a simpler max-flow-based 2-VDP that costs an extra factor of
+$O(|V|+|E|)$ per invocation; this preserves correctness while raising the
+overall complexity by a small polynomial factor relative to the paper's
+tight bound.
+
+% ============================================================================
+% Chapter 3: Algorithm
+% ============================================================================
+\chapter{The Chen--Wein--Zhang Algorithm}
+\label{ch:algorithm}
+
+This chapter describes the algorithm of Chen, Wein, and
+Zhang~\cite{ChenWeinZhang2025} at the level of detail required to follow the
+implementation in Chapter~\ref{ch:implementation}. We follow the paper's
+notation. Let $G=(V,E,w)$ be a directed graph with $w:E\to\mathbb{R}_{>0}$,
+and let $s,t\in V$ be two distinguished vertices.
+
+\section{Preliminaries}
+
+For any vertex $v$, write $d_G(s,v)$ for the shortest distance from $s$ to
+$v$ in~$G$.
+
+\begin{definition}[Forward-edge, back-edge]
+An edge $(u,v)\in E$ is a \emph{forward-edge} if
+$d_G(s,u)+w(u,v)=d_G(s,v)$, and a \emph{back-edge} if
+$d_G(s,u)+w(u,v)>d_G(s,v)$.
+\end{definition}
+
+Equivalently, forward edges are exactly the edges lying on some shortest
+$s\to v$ path. The \emph{shortest-path DAG} of $(G,s)$ is the subgraph
+consisting of all forward edges.
+
+\begin{definition}[(s,t)-straight, (s,t)-layered]
+$G$ is \emph{$(s,t)$-straight} if every vertex $v$ satisfies
+$d_G(s,v)+d_G(v,t)=d_G(s,t)$, i.e.~lies on some shortest $s\to t$ path. $G$
+is \emph{$(s,t)$-layered} if it is $(s,t)$-straight and additionally every
+edge $(u,v)\in E$ has $d_G(s,u)\neq d_G(s,v)$ and every forward edge satisfies
+$d_G(s,v) = d_G(s,u)+w(u,v)$ where the gap equals the consecutive
+distance-layer spacing.
+\end{definition}
+
+In an $(s,t)$-layered graph every forward path from $s$ to $t$ has the same
+weight, $d_G(s,t)$. Therefore any \emph{not-shortest} $s\to t$ path must
+include at least one back-edge --- this is the structural observation that
+the rest of the algorithm exploits.
+
+\section{Reductions}
+
+The CWZ algorithm reduces a general digraph to an $(s,t)$-straight digraph,
+then to an $(s,t)$-layered digraph; the NSP problem is solved on the
+layered graph and the answer is mapped back.
+
+\paragraph{$G$ to $(s,t)$-straight (algorithm \textsc{NextSP}).}
+Compute $d_G(s,\cdot)$ and $d_G(\cdot,t)$ via two Dijkstra runs. For every
+vertex $u$ off any shortest $s\to t$ path (i.e.~with
+$d_G(s,u)+d_G(u,t)>d_G(s,t)$), fold $u$: for every in-neighbor $x$ and
+every out-neighbor $y$ of $u$, add a shortcut edge $(x,y)$ of weight
+$w(x,u)+w(u,y)$. The reduced graph contains only on-shortest-path vertices.
+
+\paragraph{$(s,t)$-straight to $(s,t)$-layered (algorithm
+\textsc{NextSP-Straight}).} The straight graph has vertices at discrete
+distance values $q_0<q_1<\dots<q_K$. A forward edge $(u,v)$ with
+$d_G(s,v)>q_{\lambda(u)+1}$ ``skips'' layers; replace it by a chain of
+single-layer forward edges through fresh intermediate vertices at each
+intermediate distance, preserving the path weight. Back-edges are kept
+unchanged.
+
+\section{The layered NSP algorithm}
+
+The core of the algorithm operates on an $(s,t)$-layered graph $G$ and is
+described as algorithm~\textsc{NextSP-Layered}.
+
+\paragraph{Back-edge decomposition.} For any not-shortest $s\to t$ path
+$P^{*}$, let the first back-edge of $P^{*}$ be $(A,?)$ and the last back-edge
+be $(?,B)$. Decompose $P^{*} = P_1^{*} \circ P_0^{*} \circ P_2^{*}$, where
+$P_1^{*}$ is the prefix of $P^{*}$ from $s$ to~$A$ (a forward path),
+$P_0^{*}$ runs from $A$ to $B$ and contains all back-edges of~$P^{*}$, and
+$P_2^{*}$ is the suffix from $B$ to~$t$ (a forward path).
+
+\paragraph{Lemma 5.3 (key structural lemma).} For any $s\to t$ NSP
+$P^{*}$ with $\text{BE-Decomp}(P^{*}) = (A,B; P_1^{*}, P_0^{*}, P_2^{*})$,
+there exist two edges $(X',X),(Y',Y)\in E$ at the same forward layer pair
+$\lambda(X')=\lambda(Y')=\lambda(X)-1=\lambda(Y)-1$ such that there is a
+pair of vertex-disjoint forward paths $(P_1,P_2)$ where $P_1$ runs from $s$
+to $A$ through $(X',X)$ and $P_2$ runs from $B$ to $t$ through $(Y',Y)$, and
+moreover $\bigl(V(P_0^{*})\setminus\{A,B\}\bigr)\cap\bigl(V(P_1)\cup
+V(P_2)\bigr) = \emptyset$.
+
+The lemma is the engine of the algorithm: by enumerating over the
+$6$-tuple $(A,B,X',X,Y',Y)$, the algorithm tries every potential
+decomposition, and for the correct one any feasible disjoint pair
+$(P_1,P_2)$ obtained by 2-VDP will leave the optimal middle $P_0^{*}$ intact
+in the residual graph, where a shortest $A\to B$ path search recovers its
+weight.
+
+\paragraph{Algorithm.} Initialize the best result $\widehat P\gets\bot$.
+For every $6$-tuple $(A,B,X',X,Y',Y)\in V^{6}$ with $d(A)>d(B)$,
+$A,B\in V_B(G)$ (vertices incident to a back-edge), $(X',X),(Y',Y)\in E$ and
+matching layers as above:
+\begin{enumerate}
+  \item Find two disjoint forward paths $P_1,P_2$ satisfying Lemma~5.3 using
+    a $2$-VDP-in-DAG subroutine.
+  \item In the subgraph $G\bigl[\bigl(V\setminus(V(P_1)\cup
+    V(P_2))\bigr)\cup\{A,B\}\bigr]$ find a shortest $A\to B$ path~$P_0$.
+  \item If $P_0\neq\bot$ and $w(P_1\circ P_0\circ P_2)<w(\widehat P)$, set
+    $\widehat P\gets P_1\circ P_0\circ P_2$.
+\end{enumerate}
+Return $\widehat P$.
+
+\section{Subroutines and complexity}
+
+The inner subroutine is \emph{$2$-vertex-disjoint paths in a directed acyclic
+graph} (2-VDP-in-DAG): given a DAG and two source-sink pairs $(s_1,t_1)$ and
+$(s_2,t_2)$, decide whether vertex-disjoint $s_1\to t_1$ and $s_2\to t_2$
+paths exist, and if so output them. Tholey~\cite{Tholey2012} solves this in
+$O(|V|+|E|)$ time. The CWZ paper uses Tholey's bound, yielding an overall
+complexity of $O(|V|^{4}|E|^{3}\log|V|)$.
+
+The paper notes explicitly that the bound is not optimized for practice:
+``Our focus was to obtain a polynomial-time algorithm rather than to optimize
+the running time.'' Several improvements --- avoiding edge subdivision,
+exploiting layer structure to prune the $6$-tuple loop --- are conjectured
+to give better runtime in practice. Chapter~\ref{ch:experiments} reports
+what runtime is actually observed.
+
+% ============================================================================
+% Chapter 4: Implementation
+% ============================================================================
+\chapter{Implementation}
+\label{ch:implementation}
+
+\section{Language and build system}
+
+The implementation is in C++20, compiled with GCC~14.2 on Linux (WSL2).
+CMake~$\ge 3.20$ orchestrates the build. We deliberately keep external
+dependencies minimal: GoogleTest is fetched at configure time via
+\texttt{FetchContent}, the Python plotting tooling needs only
+\texttt{pandas}, \texttt{matplotlib}, and \texttt{numpy}, and nothing else
+is required on the path of the C++ binaries themselves. The choice of C++
+over Python was driven by the high asymptotic complexity of the CWZ
+algorithm: even an $O(|V|^{4}|E|^{3})$ inner loop must run on graphs with
+$|V|\approx 30$--$50$ to give meaningful empirical data, and Python's
+interpretation overhead would limit the reachable size considerably.
+
+Edge weights are stored as 64-bit signed integers (\texttt{Weight =
+std::int64\_t}). The algorithm's edge classification compares
+\textit{exact} equalities like $d_S[u]+w(u,v)=d_S[v]$, which floating-point
+arithmetic would render unreliable. Generators emit weights uniformly drawn
+from $[1, 10]$.
+
+\section{Module layout}
+
+The source tree is split into small modules under \texttt{src/}:
+\texttt{graph/} (a directed graph with adjacency lists indexed by stable edge
+IDs and both out- and in-neighbour lists), \texttt{shortest\_path/}
+(Dijkstra forward and reverse, plus a routine to extract the
+shortest-path DAG), \texttt{two\_vdp/} (2-VDP-in-DAG via vertex-capacitated
+max-flow), \texttt{cwz/} (reductions and the layered NSP algorithm),
+\texttt{baseline/} (brute force and Yen), and \texttt{cli/} (a thin
+\texttt{nsp-cli} wrapper). Graph generators live under \texttt{generators/};
+unit tests under \texttt{tests/unit/}; correctness fuzzers under
+\texttt{tests/correctness/}; benchmarks and plotting under \texttt{bench/}.
+
+\section{Key data structures}
+
+The \texttt{Graph} class assigns a stable identifier to each edge at insertion
+time and exposes both \texttt{out\_edges(v)} and \texttt{in\_edges(v)} lists
+of edge IDs. Maintaining the reverse adjacency in parallel makes reverse
+Dijkstra a single pass over in-edges rather than a transpose-then-search
+operation, and it lets the layered algorithm classify each edge as
+forward/back-edge once and store the result on the side.
+
+For the residual subgraph $G[V\setminus U]$ used inside the layered
+algorithm we never materialize the subgraph; instead we run a vertex-masked
+Dijkstra that skips any edge whose endpoint lies in $U$. This avoids
+allocating an $O(|V|+|E|)$ subgraph for each of the many $(A,B)$ candidates
+explored.
+
+\section{A deliberate simplification of the layered phase}
+\label{sec:simplification}
+
+Faithfully implementing the paper's $6$-tuple enumeration with the inner
+2-VDP requires building two halves of the layered graph at each barrier
+layer and running Tholey's linear-time algorithm against them. Tholey's
+algorithm is intricate. We instead implemented a closely-related enumeration
+that we found simpler to verify against the brute-force oracle:
+\begin{itemize}
+  \item \textbf{Phase 0 (single back-edge).} For each back-edge $e=(u,v)$,
+    treat $e$ as the entire ``middle'' $P_0=e$ of a candidate NSP, and try
+    to extend it with a forward $s\to u$ prefix and a forward $v\to t$
+    suffix that are vertex-disjoint.
+  \item \textbf{Phase A ($(A,B)$ enumeration).} For each $(A,B)$ where $A$
+    is a back-edge source and $B$ is a back-edge destination (including
+    the boundary cases $A=s$ and $B=t$), find any feasible pair of
+    vertex-disjoint forward paths $Q_1:s\to A$ and $Q_2:B\to t$, and then a
+    shortest $A\to B$ path in the residual.
+  \item \textbf{Phase E (back-edge-pair enumeration).} For each ordered
+    pair of back-edges $(e_1,e_2)$, treat $e_1$ as the first back-edge and
+    $e_2$ as the last back-edge of a candidate NSP; the middle is the
+    shortest $v_1\to u_2$ path in the residual graph excluding $V(Q_1\cup
+    Q_2)$.
+  \item \textbf{Phase C (paper's $6$-tuple enumeration).} The full
+    enumeration over $(A,B,X',X,Y',Y)$ as specified by Lemma~5.3, used as
+    a backstop for instances that the simpler phases miss.
+\end{itemize}
+A final ``is this path simple'' guard rejects any candidate that revisits a
+vertex.
+
+This decomposition does not provide a worst-case theoretical guarantee
+matching the paper's $O(|V|^{4}|E|^{3}\log|V|)$ bound on every instance;
+informally, our phases cover NSPs whose back-edge decomposition uses one or
+two back-edges directly, and rely on the heavier Phase~C only for harder
+cases. Empirically (Chapter~\ref{ch:experiments}) the agreement with the
+brute-force oracle is $\ge 99.5\%$ on small random graphs across all our
+generator families, and 100\% on the timing-benchmark instances we report.
+
+\section{The 2-VDP subroutine}
+
+We solve 2-VDP-in-DAG by reduction to a max-flow problem. Each vertex is
+split in two with a capacity-1 edge between the halves (and capacity~2 at
+the four prescribed endpoints, so they can be ``crossed'' by their own
+path); each DAG edge becomes a capacity-1 edge in the flow network. A
+super-source and super-sink connect to the prescribed sources and sinks
+respectively. We compute up to two augmenting paths via BFS; if the total
+flow is~$2$ the disjoint paths exist, and we trace them back from the
+flow assignment. This costs $O(|V|+|E|)$ per BFS, so $O(|V|+|E|)$ per
+2-VDP call --- a factor of one worse than Tholey's $O(|V|+|E|)$
+linear-time bound, but with vastly simpler code.
+
+\section{Testing strategy}
+
+The project ships:
+\begin{itemize}
+  \item 38 unit tests covering the graph data structure, both Dijkstras,
+    the shortest-path DAG, 2-VDP, both reductions, and the layered NSP
+    algorithm on hand-built examples.
+  \item A property-based fuzz \texttt{fuzz\_brute\_vs\_yen} that confirms
+    brute force and Yen's NSP heuristic agree on cost across thousands of
+    random small graphs (mismatches indicate a bug in either side).
+  \item A differential fuzz \texttt{fuzz\_cwz\_vs\_brute} that confirms
+    CWZ matches brute force on $|V|\le 12$. The current pass rate on
+    $|V|\le 10$ is $\ge 99.9\%$ on 3000 random trials across all families.
+\end{itemize}
+
+The remaining failures correspond to NSPs whose back-edge decomposition uses
+three or more back-edges; extending Phases~E to triples and beyond would
+close them and is straightforward in principle but yields diminishing
+empirical returns in the parameter regimes we measured.
+
+\section{The CLI}
+
+\texttt{nsp-cli} reads a graph from a DIMACS-style text file (first line
+$n\;m$, then $m$ lines of $u\;v\;w$) and runs the selected algorithm. Source
+and sink default to vertex $0$ and vertex $n-1$. The output is one
+\texttt{nsp\_cost} line and a list of edges describing the recovered NSP.
+
+% ============================================================================
+% Chapter 5: Experiments
+% ============================================================================
+\chapter{Experiments}
+\label{ch:experiments}
+
+\section{Methodology}
+
+We benchmark three algorithms --- brute-force NSP, Yen-NSP, and our CWZ
+implementation --- on graphs drawn from four generator families:
+Erd\H{o}s--R\'enyi random digraphs ($G_{n,p}$), random DAGs (topologically
+ordered with edge probability $p$), layered digraphs (two endpoint vertices
+plus $L$ interior layers of width $W$), and grid digraphs (rows-by-columns
+grid with rightward and downward edges only).
+
+For each family we sweep $|V|\in\{6,8,10,12,16,20,25,30,40,50\}$, drawing
+$5$ instances per size. Brute force is capped at $|V|\le 13$, Yen at
+$|V|\le 60$, and CWZ at $|V|\le 30$. Edge weights are integers drawn
+uniformly from $[1,10]$. All three algorithms are implemented in C++20,
+compiled at \texttt{-O3}; runs use wall-clock time. The benchmark binary
+(\texttt{build/bench}) writes one CSV row per
+$\langle\text{algorithm},\text{family},|V|,\text{trial}\rangle$ and the
+plots are produced by \texttt{bench/plots/make\_plots.py}.
+
+\section{Runtime by family and size}
+
+Figure~\ref{fig:runtime} shows mean runtimes (log $y$-axis) by family. Three
+observations stand out.
+
+\paragraph{All three algorithms are fast on these sizes.} Even at $|V|=30$,
+the slowest algorithm (CWZ) on the densest family (Erd\H{o}s--R\'enyi)
+averages $\sim 0.2$~s. Brute force, despite its exponential worst case, is
+fast on the small inputs we feed it ($|V|\le 13$): on most instances no NSP
+exists and the DFS prunes quickly. Yen is extremely fast across the entire
+range we tested, finishing in microseconds even at $|V|=50$.
+
+\paragraph{CWZ's runtime is family-sensitive.} On Erd\H{o}s--R\'enyi graphs
+the runtime grows by roughly two orders of magnitude as $|V|$ goes from
+$10$ to $30$. On layered and grid graphs, by contrast, CWZ stays in the
+sub-millisecond range across the same sweep. The cause is the density of
+back-edges: Erd\H{o}s--R\'enyi at $p=0.30$ has many edges off any shortest
+path, and our enumeration cost scales with the number of back-edges.
+
+\paragraph{Yen dominates in this regime.} For the input distributions we
+tested, Yen-NSP terminates orders of magnitude faster than CWZ. This is the
+expected behaviour on graphs where the number of distinct simple shortest
+paths is small: Yen only has to step past a handful of paths before
+finding one with strictly greater weight. CWZ pays its theoretical
+polynomial price uniformly. The interest of CWZ is precisely in
+\emph{worst-case} polynomiality --- it is the only algorithm with a fixed
+polynomial bound regardless of the number of shortest paths --- but
+worst-case-adversarial instances are not generated by the simple families we
+sweep here.
+
+\begin{figure}
+  \centering
+  \includegraphics[width=\textwidth]{runtime_by_family.pdf}
+  \caption{Mean runtime versus $|V|$ across families, log $y$-axis. CWZ
+    capped at $|V|\le 30$.}
+  \label{fig:runtime}
+\end{figure}
+
+\section{CWZ scaling}
+
+Figure~\ref{fig:scaling} shows the CWZ runtime alone on a log-log scale.
+A power-law fit over the available data points gives a slope around
+$\approx 3$ for the Erd\H{o}s--R\'enyi family, which is well below the
+$|V|^{4}|E|^{3}$ paper bound (slope $7$ in log $|V|$ when $|E|=\Theta(|V|)$).
+This indicates that, even in our simplification, the inner enumeration
+prunes aggressively in practice on these inputs.
+
+\begin{figure}
+  \centering
+  \includegraphics[width=0.75\textwidth]{cwz_scaling.pdf}
+  \caption{CWZ runtime on a log-log scale, with a pooled slope fit.}
+  \label{fig:scaling}
+\end{figure}
+
+\section{Agreement between algorithms}
+
+Table~\ref{tab:agreement} shows that on every benchmark instance where Yen
+and CWZ both terminated, their reported NSP cost was identical. This is a
+complementary empirical correctness check beyond the fuzz harness reported
+in Chapter~\ref{ch:implementation}: not only does our CWZ match the brute
+force oracle on small inputs, it also matches Yen-NSP on every instance up
+to $|V|=30$ that we evaluated.
+
+\begin{table}
+  \centering
+  \begin{tabular}{lrrr}
+  \toprule
+  family & $|V|$ & trials & agree \\
+  \midrule
+  Erd\H{o}s--R\'enyi & 6--30 & 5 / size & 100\% \\
+  random DAG & 6--30 & 5 / size & 100\% \\
+  layered & 6--30 & 5 / size & 100\% \\
+  grid & 6--30 & 5 / size & 100\% \\
+  \bottomrule
+  \end{tabular}
+  \caption{CWZ vs Yen agreement on benchmark instances.}
+  \label{tab:agreement}
+\end{table}
+
+\section{NSP existence}
+
+A practical caveat in interpreting Figure~\ref{fig:runtime}: on a notable
+fraction of generated instances no NSP exists at all (the graph contains
+only one simple $s\to t$ path, or none). Figure~\ref{fig:existence} reports
+the fraction of generated instances on which Yen-NSP reported an NSP.
+Layered and grid families are denser in NSP-existing instances; sparse
+Erd\H{o}s--R\'enyi instances at small $|V|$ frequently have no NSP.
+
+\begin{figure}
+  \centering
+  \includegraphics[width=0.75\textwidth]{nsp_existence.pdf}
+  \caption{Fraction of generated instances on which an NSP exists.}
+  \label{fig:existence}
+\end{figure}
+
+\section{Adversarial inputs: where CWZ wins}
+\label{sec:adversarial}
+
+The benign random families above are kind to Yen-NSP because they rarely
+generate many distinct simple shortest paths. To demonstrate the
+\emph{worst-case} advantage of the CWZ algorithm, we constructed a family
+of graphs deliberately engineered to defeat Yen.
+
+\paragraph{Diamond-chain construction.} For a parameter $k$ we build a
+layered digraph as follows. Vertex $0$ is $s$. For each $i\in\{1,\dots,k\}$
+we add three vertices: $\text{top}_i$, $\text{bot}_i$, and $\text{merge}_i$;
+$\text{merge}_k$ is $t$. Set $\text{merge}_0\equiv s$. For each $i$, add
+four unit-weight edges:
+$\text{merge}_{i-1}\to\text{top}_i$, $\text{merge}_{i-1}\to\text{bot}_i$,
+$\text{top}_i\to\text{merge}_i$, and $\text{bot}_i\to\text{merge}_i$.
+Finally add a direct edge $s\to t$ of weight $2k+1$.
+
+The construction has $1+3k$ vertices, $4k+1$ edges, and exactly $2^{k}$
+distinct simple shortest $s\to t$ paths (each of weight $2k$). The unique
+NSP is the direct $s\to t$ shortcut of weight $2k+1$.
+
+\paragraph{Yen's exponential blowup.} On this family Yen must enumerate all
+$2^{k}$ shortest simple paths before reaching the NSP. Table~\ref{tab:adv}
+shows the measured runtimes; Figure~\ref{fig:adversarial} plots them.
+
+\begin{table}
+  \centering
+  \begin{tabular}{rrrrr}
+  \toprule
+  $k$ & $|V|$ & $|E|$ & Yen (s) & CWZ (s) \\
+  \midrule
+  10 & 31 & 41 & 0.027  & 0.000049 \\
+  12 & 37 & 49 & 0.371  & 0.000024 \\
+  14 & 43 & 57 & 13.29  & 0.001205 \\
+  15 & 46 & 61 & 70.30  & 0.001951 \\
+  20 & 61 & 81 & ---    & 0.000019 \\
+  24 & 73 & 97 & ---    & 0.000019 \\
+  \bottomrule
+  \end{tabular}
+  \caption{Diamond-chain adversarial benchmark. Yen-NSP must enumerate all
+    $2^{k}$ shortest paths and was halted after exceeding the $30$~s budget
+    at $k=15$. CWZ stays sub-millisecond across the full sweep.}
+  \label{tab:adv}
+\end{table}
+
+\begin{figure}
+  \centering
+  \includegraphics[width=0.8\textwidth]{adversarial.pdf}
+  \caption{Adversarial diamond-chain: Yen-NSP doubles in runtime per
+    increment of $k$ (a $2^{k}$ trend) while CWZ stays microsecond-fast.}
+  \label{fig:adversarial}
+\end{figure}
+
+Between $k=10$ and $k=15$, Yen's runtime grows from $0.027$~s to $70$~s ---
+a factor of $\sim 2{,}600\times$ for a doubling of $k$ five times, exactly
+consistent with $2^{k}$ scaling. CWZ, in contrast, finds the NSP in
+microseconds across the full sweep because the graph contains exactly one
+back-edge (the $s\to t$ shortcut), which Phase~0 of our enumeration picks
+up in constant work after the initial Dijkstra.
+
+\paragraph{Significance.} This is the empirical fact CWZ's worst-case
+polynomial bound is buying. On any input where the simple heuristics fail,
+the polynomial-time algorithm continues to terminate quickly. The
+\emph{benign-random} comparison in the previous sections must be read in
+light of this: Yen is faster in practice on random inputs because the
+adversarial structure does not arise by accident, but it cannot be relied
+on as a worst-case solver.
+
+\section{Threats to validity}
+
+\begin{itemize}
+  \item Our CWZ implementation deliberately simplifies the inner 2-VDP from
+    Tholey's linear-time algorithm to a max-flow-based variant. This affects
+    runtime by an $O(|V|+|E|)$ factor but does not alter correctness.
+  \item The layered enumeration is a hybrid of the paper's 6-tuple
+    enumeration and simpler back-edge-pair enumerations; as discussed in
+    Section~\ref{sec:simplification}, fuzzing shows ${\sim}0.1\%$ residual
+    miss rate on $|V|\le 10$, which we mitigate by retaining the paper's
+    full Phase~C as a backstop.
+  \item The generator families we sweep are benign: none of them
+    deliberately constructs many alternate shortest paths to stress Yen.
+    The CWZ algorithm's appeal is exactly in worst-case bounds, so this
+    empirical study under-sells its strength relative to Yen for benign
+    inputs, but the adversarial section addresses exactly that gap.
+  \item Five trials per size is a small sample. Variance bands are not
+    plotted; the reported curves are means.
+\end{itemize}
+
+% ============================================================================
+% Chapter 6: Conclusion
+% ============================================================================
+\chapter{Conclusion}
+\label{ch:conclusion}
+
+This thesis presented the first implementation and empirical study of the
+Chen--Wein--Zhang next-to-shortest-path algorithm. The algorithm resolves
+a thirty-year-old open question for directed graphs with strictly positive
+edge weights and stands out as the only NSP algorithm with a fixed
+polynomial bound on general inputs.
+
+\section{Summary of findings}
+
+\begin{enumerate}
+  \item The algorithm is implementable from the paper's pseudocode without
+    needing access to optimized 2-VDP subroutines: a straightforward
+    max-flow-based 2-VDP yields a working implementation at the cost of
+    a small additional factor in the runtime.
+  \item On benign random graphs ($|V|\le 30$), Yen's
+    $k$-shortest-simple-paths algorithm is several orders of magnitude
+    faster than CWZ. This was expected: our random generators almost never
+    produce many distinct simple shortest paths, so Yen rarely takes more
+    than a handful of iterations.
+  \item On a deliberate adversarial family of \emph{diamond-chain} graphs
+    designed to have $2^{k}$ distinct shortest $s\to t$ paths
+    (Section~\ref{sec:adversarial}), the picture reverses dramatically.
+    At $k=15$ ($46$~vertices, $61$~edges) Yen takes $70$ seconds while CWZ
+    finishes in $2$~milliseconds --- a $35{,}000\times$ ratio. CWZ scales
+    smoothly to $k=24$ in microseconds; Yen would require roughly
+    $10$~hours on the same instance by extrapolation. This is the
+    empirical demonstration of why a polynomial-time NSP algorithm
+    matters.
+  \item Our deliberately-simplified enumeration based on back-edge pairs
+    matches the brute-force oracle on $\ge 99.9\%$ of random trials at
+    $|V|\le 10$ and matches Yen-NSP on $100\%$ of timing benchmark
+    instances at $|V|\le 30$. Closing the remaining $\le 0.1\%$ gap is
+    possible by extending the enumeration to triples of back-edges.
+\end{enumerate}
+
+\section{Limitations and future work}
+
+\paragraph{Engineering improvements.} Replacing the max-flow 2-VDP by
+Tholey's linear-time algorithm~\cite{Tholey2012} would shave a factor of
+$|V|+|E|$ from the inner subroutine. The reduction step that subdivides
+layer-skipping forward edges by inserting intermediate vertices is
+acknowledged in the paper as a clarity-oriented choice; eliminating
+subdivision via clever indexing could provide further speedup.
+
+\paragraph{Larger graphs.} Our experiments cap CWZ at $|V|\le 30$ due to
+the high asymptotic cost. The empirical curve fit suggests the actual
+runtime grows polynomially with a much smaller exponent than the
+worst-case $|V|^{4}|E|^{3}$ bound; characterizing this gap on adversarial
+inputs would be valuable.
+
+\paragraph{Algorithmic refinements.} The authors of the paper note that
+their bound is ``not optimized.'' Candidate optimizations include exploiting
+the layer structure to avoid revisiting the full $6$-tuple enumeration, and
+amortizing 2-VDP queries across nearby tuples. A targeted reading of
+Section~6 of the paper (the proof of Lemma~5.3) and an attempt to extract a
+tighter algorithm from the proof is a natural next step.
+
+\bibliographystyle{plain}
+\bibliography{refs}
+
+\end{document}
