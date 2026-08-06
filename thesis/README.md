@@ -25,3 +25,10 @@ files in `chapters/` should remain reusable as long as the new template uses
 cd thesis
 pdflatex main && bibtex main && pdflatex main && pdflatex main
 ```
+
+`main.tex` + `chapters/` + `refs.bib` are the single source of truth. A
+flattened single-file copy (`overleaf_single.tex`) used to live here; it drifted
+a month out of date and still described an implementation design that has since
+been abandoned, so it was removed. Overleaf accepts a multi-file upload — upload
+this whole directory (plus `../results/` for the figures) rather than
+re-flattening.

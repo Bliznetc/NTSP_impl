@@ -65,9 +65,17 @@ couple of minutes.
 ### Running fuzz tests
 
 ```bash
-./build/fuzz_cwz_vs_brute 1000 10 0xDEADBEEF
-# Expected: mismatches=0. The faithful pipeline matches the brute-force
-# oracle on every random instance we have tested (35,000+ trials, |V|<=14).
+./build/fuzz_cwz_vs_brute 1000 10 1001
+# Expected: mismatches=0.
+```
+
+Arguments are `[num_trials] [max_n] [seed]`. The full campaign reported in
+the thesis is 34,000 trials over 35 distinct seeds:
+
+```bash
+for s in $(seq 1001 1020); do ./build/fuzz_cwz_vs_brute 1000 10 $s; done
+for s in $(seq 2001 2010); do ./build/fuzz_cwz_vs_brute 1000 12 $s; done
+for s in $(seq 3001 3005); do ./build/fuzz_cwz_vs_brute  800 14 $s; done
 ```
 
 ## Layout
@@ -113,7 +121,7 @@ pdflatex main && bibtex main && pdflatex main && pdflatex main
 | Thesis drafts | Done (all 6 chapters, needs supervisor pass) |
 
 Correctness: the full pipeline matches the brute-force oracle with **zero
-mismatches across 35,000+ random trials** (|V|≤14), and matches Yen on every
+mismatches across 34,000 random trials** (35 distinct seeds, |V|≤14), and matches Yen on every
 benign benchmark instance up to |V|=50. An ablation confirms the 6-tuple
 enumeration alone suffices on the strictly-layered graph.
 
@@ -129,8 +137,9 @@ The paper proves a worst-case bound of `O(|V|^4 |E|^3 log|V|)`. That bound
 follows from the algorithm's *structure* (which this code now matches), not
 from the benchmarks: experiments measure runtime on particular inputs and
 cannot verify a worst-case upper bound. What the benchmarks do show is that
-the implementation is empirically polynomial with a small exponent (log-log
-fit slope ≈ 2–3 on the families tested) — i.e. far below the worst case on
+the implementation is empirically polynomial with a modest exponent that
+depends on the family (log-log fit slope ≈ 1.2 on layered graphs up to ≈ 4.9
+on dense Erdős–Rényi) — i.e. far below the worst case on
 real inputs. Two caveats on inheriting the paper's exact bound: the max-flow
 2-VDP is `O(|V|+|E|)` per call (same class as Tholey, larger constant), and
 the `K=5` cap is a non-rigorous bound on the `reduce_to_straight` blow-up
