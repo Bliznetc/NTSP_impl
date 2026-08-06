@@ -57,7 +57,8 @@ cwz::Graph make(int kind, int n, std::mt19937& rng) {
 int main(int argc, char** argv) {
     int num_trials = argc > 1 ? std::atoi(argv[1]) : 2000;
     int max_n = argc > 2 ? std::atoi(argv[2]) : 10;
-    std::uint64_t seed = argc > 3 ? std::strtoull(argv[3], nullptr, 10) : 0xC0FFEEULL;
+    // base 0: accept decimal and 0x-prefixed hex (base 10 parsed "0x..." as 0).
+    std::uint64_t seed = argc > 3 ? std::strtoull(argv[3], nullptr, 0) : 0xC0FFEEULL;
     std::mt19937 rng(static_cast<unsigned>(seed));
 
     int mismatches = 0;

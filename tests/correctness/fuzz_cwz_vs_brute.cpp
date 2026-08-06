@@ -54,7 +54,10 @@ cwz::Graph make(int kind, int n, std::mt19937& rng) {
 int main(int argc, char** argv) {
     int num_trials = argc > 1 ? std::atoi(argv[1]) : 1000;
     int max_n = argc > 2 ? std::atoi(argv[2]) : 8;
-    std::uint64_t seed = argc > 3 ? std::strtoull(argv[3], nullptr, 10) : 0xDEADBEEFULL;
+    // base 0: accept decimal and 0x-prefixed hex. With base 10 a documented
+    // seed like 0xDEADBEEF silently parsed as 0, so "N different seeds" runs
+    // all replayed the same instances.
+    std::uint64_t seed = argc > 3 ? std::strtoull(argv[3], nullptr, 0) : 0xDEADBEEFULL;
     std::mt19937 rng(static_cast<unsigned>(seed));
 
     int mismatches = 0;
