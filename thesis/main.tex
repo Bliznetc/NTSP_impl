@@ -22,6 +22,13 @@
 \newcommand{\midrule}{\hline}
 \newcommand{\bottomrule}{\hline\hline}
 
+% Long \texttt{} tokens (file paths, C++ identifiers) are unbreakable by
+% default and were overrunning the right margin -- one of them clipped
+% "results/agreement_summary.csv" mid-word. Allow hyphenation in typewriter
+% text and give TeX a little extra slack when justifying.
+\usepackage[htt]{hyphenat}
+\setlength{\emergencystretch}{3em}
+
 \newtheorem{theorem}{Theorem}[chapter]
 \newtheorem{lemma}[theorem]{Lemma}
 \newtheorem{definition}[theorem]{Definition}
@@ -39,7 +46,7 @@
 We implement and empirically evaluate the polynomial-time algorithm of
 Chen, Wein, and Zhang (arXiv:2511.04345, November~2025) for the
 next-to-shortest path (NSP) problem in directed graphs with strictly
-positive edge weights --- the first polynomial-time algorithm for this
+positive edge weights -- the first polynomial-time algorithm for this
 problem after nearly thirty years as an open question. Our C++20
 implementation follows the paper's three-stage pipeline: a reduction to
 an $(s,t)$-straight digraph by iterative folding of off-shortest-path
@@ -49,22 +56,21 @@ back-edges while recording their candidate paths), and finally a
 $6$-tuple enumeration on the layered graph that invokes a
 $2$-vertex-disjoint paths subroutine in directed acyclic graphs.
 
-Correctness is validated by two independent oracles --- a brute-force
-simple-path enumerator (capped at $|V|\le 13$) and Yen's $k$-shortest
-simple-paths algorithm used as an NSP solver --- and by a
+Correctness is validated by two independent oracles -- a brute-force
+branch-and-bound search over simple paths and Yen's $k$-shortest
+simple-paths algorithm used as an NSP solver -- and by a
 differential-fuzzing harness that records \emph{zero} NSP-cost
-mismatches across more than $35{,}000$ random instances ($|V|\le 14$) and
+mismatches across $34{,}000$ random instances ($|V|\le 14$) and
 $100\%$ agreement with Yen on every benign benchmark instance up to
-$|V|=50$. Empirically the CWZ algorithm is several orders of magnitude
+$|V|=70$. Empirically the CWZ algorithm is several orders of magnitude
 slower than Yen on the four benign random families we sweep (where
 shortest paths are typically unique), but on a deliberately-constructed
 adversarial diamond-chain family with $2^{k}$ distinct shortest paths
-the picture reverses: at $k=15$ ($|V|=46$) Yen takes $59$~seconds while
-CWZ completes in $1.4$~milliseconds, a ${\sim}41{,}000\times$ ratio that
+the picture reverses: at $k=15$ ($|V|=46$) Yen takes $56$~seconds while
+CWZ completes in $22$~microseconds, a ${\sim}2.6$-million-fold ratio that
 grows exponentially with $k$; and with a practical enumeration cap Yen
 returns the wrong answer entirely on the largest instances while CWZ
-stays correct. This is, to our knowledge, the first empirical study of
-the CWZ algorithm.
+stays correct.
 \end{abstract}
 
 \tableofcontents

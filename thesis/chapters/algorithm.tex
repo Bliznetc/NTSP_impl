@@ -33,7 +33,7 @@ distance-layer spacing.
 
 In an $(s,t)$-layered graph every forward path from $s$ to $t$ has the same
 weight, $d_G(s,t)$. Therefore any \emph{not-shortest} $s\to t$ path must
-include at least one back-edge --- this is the structural observation that
+include at least one back-edge -- this is the structural observation that
 the rest of the algorithm exploits.
 
 \section{Reductions}
@@ -86,7 +86,7 @@ $P_1^{*}$ is the prefix of $P^{*}$ from $s$ to~$A$ (a forward path),
 $P_0^{*}$ runs from $A$ to $B$ and contains all back-edges of~$P^{*}$, and
 $P_2^{*}$ is the suffix from $B$ to~$t$ (a forward path). Lemma~5.2 of the
 paper shows that in a (strictly) $(s,t)$-layered graph one always has
-$d(B)<d(A)$ --- the back-edge region jumps strictly backward in layer ---
+$d(B)<d(A)$ -- the back-edge region jumps strictly backward in layer --
 and that every interior vertex $u$ of $P_0^{*}$ satisfies
 $d(B)<d(u)<d(A)$. This is why the enumeration below can restrict to
 $d(A)>d(B)$, and why a graph that is not \emph{strictly} layered (where a
@@ -133,7 +133,7 @@ complexity of $O(|V|^{4}|E|^{3}\log|V|)$.
 
 The paper notes explicitly that the bound is not optimized for practice:
 ``Our focus was to obtain a polynomial-time algorithm rather than to optimize
-the running time.'' Several improvements --- avoiding edge subdivision,
-exploiting layer structure to prune the $6$-tuple loop --- are conjectured
+the running time.'' Several improvements -- avoiding edge subdivision,
+exploiting layer structure to prune the $6$-tuple loop -- are conjectured
 to give better runtime in practice. Chapter~\ref{ch:experiments} reports
 what runtime is actually observed.

@@ -30,8 +30,9 @@ Eppstein's algorithm does not directly apply.
 
 \section{Next-to-shortest path: positive results}
 
-Lalla and Srinivasan~\cite{LallaSrinivasan1992} introduced the NSP problem
-and showed it is NP-complete in directed graphs with non-negative weights (in
+The NSP problem was introduced in 1996, and Lalgudi and
+Papaefthymiou~\cite{LalgudiPapaefthymiou1997} soon after showed it is
+NP-complete in directed graphs with non-negative weights (in
 particular, when zero weights are permitted). The undirected case admits a
 polynomial-time algorithm: Krasikov and Noble~\cite{KrasikovNoble2004}
 gave an $O(n^3 m)$-time algorithm; Wu's later
@@ -43,8 +44,8 @@ For \emph{general} directed graphs with strictly positive weights, the
 problem remained open for nearly three decades. Chen, Wein, and Zhang
 \cite{ChenWeinZhang2025} resolved it in November~2025 with an
 $O\bigl(|V|^{4}|E|^{3}\log|V|\bigr)$-time algorithm. The algorithm proceeds
-by two reductions --- general digraph to $(s,t)$-straight to $(s,t)$-layered
---- followed by a structural enumeration over $6$-tuples of vertices and
+by two reductions -- general digraph to $(s,t)$-straight to $(s,t)$-layered
+-- followed by a structural enumeration over $6$-tuples of vertices and
 edges that, together with a $2$-vertex-disjoint-paths subroutine in a DAG,
 suffice to find any NSP if one exists.
 
