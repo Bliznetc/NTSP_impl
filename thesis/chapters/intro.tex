@@ -18,7 +18,7 @@ Despite its surface similarity to the shortest path problem, the NSP problem
 behaves very differently. The shortest path problem in graphs with positive
 weights is solved in near-linear time by Dijkstra's algorithm, but the NSP
 problem becomes \emph{NP-complete} as soon as zero-weight edges are
-admitted in a directed graph~\cite{LallaSrinivasan1992}, and the
+admitted in a directed graph~\cite{LalgudiPapaefthymiou1997}, and the
 \emph{strictly} positively weighted directed case had remained open for nearly
 thirty years. Polynomial-time algorithms were known only for undirected
 graphs~\cite{KrasikovNoble2004} and for planar directed
@@ -47,15 +47,14 @@ experimental evaluation. The contributions of this thesis are:
 \begin{enumerate}
   \item A C++20 implementation of the CWZ algorithm and its supporting
     reductions to $(s,t)$-straight and $(s,t)$-layered digraphs.
-  \item Reference implementations of two correctness oracles --- a brute-force
+  \item Reference implementations of two correctness oracles -- a brute-force
     enumerator and Yen's $k$-shortest-simple-paths algorithm used as an NSP
-    heuristic --- and a differential-fuzzing harness comparing them across
+    heuristic -- and a differential-fuzzing harness comparing them across
     random graphs from five generator families.
   \item An empirical study of the CWZ algorithm's runtime on graphs from
     five families (Erd\H{o}s--R\'enyi, random DAG, layered, grid, and a
     deliberately adversarial diamond-chain family), comparing it against
-    Yen-NSP as the practical baseline. This is, to our knowledge, the
-    first empirical evaluation of the CWZ algorithm.
+    Yen-NSP as the practical baseline.
 \end{enumerate}
 
 \section{Outline}
@@ -64,7 +63,7 @@ Chapter~\ref{ch:litreview} surveys prior work on NSP and related shortest-path
 problems. Chapter~\ref{ch:algorithm} describes the CWZ algorithm, including
 its two reductions, its key Lemma~5.3, and the role of $2$-vertex-disjoint
 paths in directed acyclic graphs. Chapter~\ref{ch:implementation} discusses
-implementation choices, an ablation showing the $6$-tuple enumeration alone
+implementation choices, why the $6$-tuple enumeration alone
 suffices once the reduction emits a strictly layered graph, and the single
 remaining approximation. Chapter~\ref{ch:experiments} reports empirical
 results across graph families. Chapter~\ref{ch:conclusion} concludes.
