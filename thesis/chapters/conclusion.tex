@@ -16,7 +16,7 @@ with a fixed polynomial bound on general inputs.
     at the cost of a higher constant factor (the asymptotic
     $O(|V|+|E|)$ bound is the same as Tholey's linear-time algorithm).
   \item On the four benign random graph families we measured
-    (Erd\H{o}s--R\'enyi, random DAG, layered, grid) at $|V|\le 50$,
+    (Erd\H{o}s--R\'enyi, random DAG, layered, grid) at $|V|\le 70$,
     Yen's $k$-shortest-simple-paths algorithm is several orders of
     magnitude faster than CWZ. This was expected: our random generators
     almost never produce many distinct simple shortest paths, so Yen
@@ -24,8 +24,8 @@ with a fixed polynomial bound on general inputs.
   \item On a deliberate adversarial family of \emph{diamond-chain}
     graphs designed to have $2^{k}$ distinct shortest $s\to t$ paths
     (Section~\ref{sec:adversarial}), the picture reverses dramatically.
-    At $k=15$ ($|V|=46$, $|E|=61$) Yen takes $59$~seconds while CWZ
-    finishes in $1.4$~milliseconds --- a ${\sim}41{,}000\times$ ratio
+    At $k=15$ ($|V|=46$, $|E|=61$) Yen takes $56$~seconds while CWZ
+    finishes in $22$~microseconds -- a ${\sim}2.6$-million-fold ratio
     that grows exponentially with $k$. CWZ scales smoothly to $k=24$
     ($|V|=73$) in tens of microseconds; Yen would require many hours on
     the same instance by extrapolation. Worse, with a practical
@@ -39,10 +39,10 @@ with a fixed polynomial bound on general inputs.
     back-edges, recording their candidate paths, to obtain a strictly
     $(s,t)$-layered graph), and \textsc{NextSP-Layered} (the Lemma~5.3
     $6$-tuple enumeration). It matches the brute-force oracle with
-    \emph{zero} mismatches across more than $35{,}000$ random instances
+    \emph{zero} mismatches across $34{,}000$ random instances
     ($|V|\le 14$) and matches Yen on every benign benchmark instance up
-    to $|V|=50$. An ablation confirms the $6$-tuple enumeration alone
-    suffices on the strictly-layered graph --- the property the paper's
+    to $|V|=70$. The $6$-tuple enumeration alone
+    suffices on the strictly-layered graph -- the property the paper's
     correctness proof relies on. The one remaining approximation is the
     $K=5$ multi-edge cap in \textsc{NextSP} (below).
 \end{enumerate}
@@ -56,11 +56,12 @@ constant factor on the inner subroutine. Eliminating the
 suggested by the paper's authors as a clarity-oriented choice, could
 provide further speedup.
 
-\paragraph{Larger graphs.} Our experiments stop at $|V|=50$. The
-empirical curve on Erd\H{o}s--R\'enyi suggests the actual runtime grows
-polynomially with an exponent of roughly $3$, well below the
-worst-case $|V|^{4}|E|^{3}$ bound; characterising this gap on still
-larger or differently-structured inputs would be valuable.
+\paragraph{Larger graphs.} Our experiments stop at $|V|\approx 70$. The
+empirical exponent depends strongly on the family, ranging from
+$\approx 1.3$ on diamond chains to $\approx 4.3$ on dense
+Erd\H{o}s--R\'enyi graphs, in every case well below the worst-case
+$|V|^{4}|E|^{3}$ bound; characterising this gap on still larger or
+differently-structured inputs would be valuable.
 
 \paragraph{Multi-edge cap tightening.} The $K=5$ multi-edge cap in
 \texttt{reduce\_to\_straight} is the one approximation in our pipeline.
@@ -74,8 +75,8 @@ proven transcription of the paper.
 
 \paragraph{Adversarial benchmarks.} The diamond-chain family is the
 simplest construction we know of that defeats Yen. Richer adversarial
-graphs --- recursive nestings, irregular branching factors, weight
-ratios that vary with depth --- would map out the boundary between
+graphs -- recursive nestings, irregular branching factors, weight
+ratios that vary with depth -- would map out the boundary between
 ``Yen survives'' and ``CWZ is the only viable option'' more finely.
 
 \paragraph{Algorithmic refinements.} The paper's authors note their
