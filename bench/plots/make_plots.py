@@ -33,6 +33,16 @@ def main():
     TIMER_FLOOR = 1e-6
     df["seconds"] = df["seconds"].clip(lower=TIMER_FLOOR)
 
+    # Instances where t is unreachable from s are degenerate: every algorithm
+    # returns straight after its first Dijkstra, so they measure nothing but
+    # startup cost. At |V|=6 they are the majority of the sparse random
+    # families (13/20 Erdos-Renyi, 11/20 random DAG), which flattened the
+    # small-|V| end of every curve. Runtime aggregates use solvable instances
+    # only; the existence plot below still reports over all instances.
+    solvable = df[df["had_path"]]
+    n_drop = len(df) - len(solvable)
+    print(f"runtime plots: dropped {n_drop}/{len(df)} rows with no s->t path")
+
     families = sorted(df["family"].unique())
     algos = ["brute", "yen", "cwz"]
     colors = {"brute": "tab:gray", "yen": "tab:orange", "cwz": "tab:blue"}
@@ -48,7 +58,7 @@ def main():
     flat_axes = axes.flatten()
     for idx, fam in enumerate(families):
         ax = flat_axes[idx]
-        sub = df[df["family"] == fam]
+        sub = solvable[solvable["family"] == fam]
         for algo in algos:
             ag = sub[sub["algo"] == algo]
             if ag.empty:
@@ -81,20 +91,28 @@ def main():
 
     # Plot 2: log-log runtime growth for CWZ to estimate the scaling exponent.
     fig, ax = plt.subplots(figsize=(5, 4))
-    cwz = df[df["algo"] == "cwz"]
+    cwz = solvable[solvable["algo"] == "cwz"]
+    # Aggregate with the MEDIAN, matching the statistic reported everywhere else
+    # (an earlier version fitted means here, which the pooled fit let the
+    # slowest family dominate and produced a slope inconsistent with the text).
+    slopes = {}
     for fam in families:
         ag = cwz[cwz["family"] == fam]
         if ag.empty:
             continue
-        mean = ag.groupby("n")["seconds"].mean()
-        ax.loglog(mean.index, mean.values, "o-", label=fam)
-    # Fit a slope over the largest contiguous data block.
-    pooled = cwz.groupby("n")["seconds"].mean().reset_index()
-    if len(pooled) >= 3:
-        x = np.log(pooled["n"].values.astype(float))
-        y = np.log(pooled["seconds"].values.astype(float))
-        slope, intercept = np.polyfit(x, y, 1)
-        ax.set_title(f"CWZ runtime log-log; pooled slope ~ {slope:.2f}")
+        med = ag.groupby("n_actual")["seconds"].median()
+        med = med[med > 0]
+        ax.loglog(med.index, med.values, "o-", label=fam)
+        if len(med) >= 3:
+            x = np.log(med.index.values.astype(float))
+            y = np.log(med.values.astype(float))
+            slopes[fam] = np.polyfit(x, y, 1)[0]
+    if slopes:
+        lo, hi = min(slopes.values()), max(slopes.values())
+        ax.set_title(f"CWZ runtime log-log; per-family slopes {lo:.1f}-{hi:.1f}")
+        print("CWZ log-log slopes (median runtime vs ACTUAL |V|):")
+        for fam, s in sorted(slopes.items(), key=lambda kv: kv[1]):
+            print(f"  {fam:15s} {s:5.2f}")
     else:
         ax.set_title("CWZ runtime (log-log)")
     ax.set_xlabel("|V|")
@@ -109,8 +127,12 @@ def main():
     # Plot 3: NSP-existence rate per family per n (informational; used in thesis
     # to describe the input distribution).
     fig, ax = plt.subplots(figsize=(5, 4))
+    # Ground truth comes from the brute-force oracle, NOT from Yen. Yen reports
+    # "no NSP" when it exhausts its k_max enumeration cap, which on diamond
+    # chains at |V| >= 40 made this curve collapse to zero on the one family
+    # that provably always has an NSP. Brute force is exact.
     for fam in families:
-        sub = df[(df["family"] == fam) & (df["algo"] == "yen")]
+        sub = df[(df["family"] == fam) & (df["algo"] == "brute")]
         if sub.empty:
             continue
         rate = sub.groupby("n")["has_nsp"].mean()
@@ -133,12 +155,20 @@ def main():
             trials = df[(df["family"] == fam) & (df["n"] == n)]
             cwz_t = trials[trials["algo"] == "cwz"].set_index("trial")["nsp_cost"]
             yen_t = trials[trials["algo"] == "yen"].set_index("trial")["nsp_cost"]
+            brute_t = trials[trials["algo"] == "brute"].set_index("trial")["nsp_cost"]
             both = cwz_t.index.intersection(yen_t.index)
             if len(both) == 0:
                 continue
             agree = sum(cwz_t.loc[i] == yen_t.loc[i] for i in both)
-            summary.append({"family": fam, "n": n, "trials": len(both),
-                            "cwz_yen_agree": agree})
+            row = {"family": fam, "n": n, "trials": len(both),
+                   "cwz_yen_agree": agree}
+            # CWZ vs the exact oracle -- the stronger check, available across
+            # the whole sweep now that brute force is no longer capped.
+            vs_brute = cwz_t.index.intersection(brute_t.index)
+            row["brute_trials"] = len(vs_brute)
+            row["cwz_brute_agree"] = sum(cwz_t.loc[i] == brute_t.loc[i]
+                                         for i in vs_brute)
+            summary.append(row)
     summary_df = pd.DataFrame(summary)
     summary_df.to_csv(out_dir / "agreement_summary.csv", index=False)
     print(f"wrote {out_dir / 'agreement_summary.csv'}")
