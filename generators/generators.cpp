@@ -57,17 +57,49 @@ Graph layered(int layers, int width, double p_forward, double p_back,
     for (int j = 0; j < width; ++j) {
         g.add_edge(0, layer_start(0) + j, rand_weight(rng, max_weight));
     }
-    // layer i -> layer i+1
+    // layer i -> layer i+1. Every layer is guaranteed to contain at least one
+    // vertex REACHABLE FROM s, which makes t reachable from s (the last layer
+    // always connects to t).
+    //
+    // Sampling width^2 pairs independently at p_forward leaves a transition
+    // empty with probability (1-p_forward)^(width^2) -- 13% at width=2,
+    // p_forward=0.4 -- which severs the graph. Guaranteeing merely one edge per
+    // transition is NOT enough: if that edge starts at a vertex that is itself
+    // unreachable, the graph is still severed, and at width=2 reachability then
+    // decays like 2^-(layers-2) (measured 48% severed at layers=5, width=2,
+    // p_forward=0.4). So we track reachability as we build and, when a
+    // transition would leave the next layer unreachable, add a repair edge out
+    // of a vertex that is known to be reachable.
+    std::uniform_int_distribution<int> pick(0, width - 1);
+    std::vector<char> reachable(width, 1);  // s connects to all of layer 0
     for (int i = 0; i + 1 < layers; ++i) {
+        std::vector<char> next(width, 0);
         for (int u = 0; u < width; ++u) {
             for (int v = 0; v < width; ++v) {
                 if (fwd(rng)) {
                     g.add_edge(layer_start(i) + u, layer_start(i + 1) + v,
                                rand_weight(rng, max_weight));
+                    if (reachable[u]) next[v] = 1;
                 }
             }
         }
+        bool any_reachable = false;
+        for (int v = 0; v < width; ++v) any_reachable = any_reachable || next[v];
+        if (!any_reachable) {
+            std::vector<int> sources;
+            for (int u = 0; u < width; ++u) if (reachable[u]) sources.push_back(u);
+            // `reachable` is non-empty by induction: layer 0 is fully reachable
+            // and every iteration below restores at least one reachable vertex.
+            int u = sources[std::uniform_int_distribution<int>(
+                0, (int)sources.size() - 1)(rng)];
+            int v = pick(rng);
+            g.add_edge(layer_start(i) + u, layer_start(i + 1) + v,
+                       rand_weight(rng, max_weight));
+            next[v] = 1;
+        }
+        reachable.swap(next);
     }
+
     // optional back-edges layer i+1 -> layer i
     if (p_back > 0) {
         for (int i = 0; i + 1 < layers; ++i) {
