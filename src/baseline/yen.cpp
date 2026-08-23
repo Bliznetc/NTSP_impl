@@ -1,5 +1,7 @@
 #include "baseline/yen.h"
 
+#include <stdexcept>
+
 #include <algorithm>
 #include <cassert>
 #include <queue>
@@ -72,6 +74,9 @@ Weight path_cost(const Graph& g, const std::vector<EdgeId>& edges) {
 }  // namespace
 
 NspResult yen_nsp(const Graph& g, VertexId s, VertexId t, int k_max) {
+    if (s < 0 || s >= g.num_vertices() || t < 0 || t >= g.num_vertices()) {
+        throw std::out_of_range("yen_nsp: s or t out of range");
+    }
     NspResult r;
     if (s == t) return r;
     const VertexId n = g.num_vertices();

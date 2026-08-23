@@ -1,16 +1,58 @@
 #include "baseline/brute_force.h"
 
+#include <queue>
 #include <stdexcept>
+#include <utility>
 
 namespace cwz {
 
 namespace {
+
+// Self-contained Dijkstra. This file is the correctness oracle for the CWZ
+// implementation, so it deliberately does *not* reuse src/shortest_path/: an
+// oracle that shares code with the code under test cannot catch bugs in that
+// shared code. `reverse` walks in-edges, giving shortest u->t distances.
+//
+// Correctness note: edge weights are strictly positive, so the shortest walk
+// and the shortest simple path coincide and Dijkstra is exact here.
+std::vector<Weight> dijkstra_local(const Graph& g, VertexId src, bool reverse) {
+    const VertexId n = g.num_vertices();
+    std::vector<Weight> dist(n, kInfWeight);
+    using QE = std::pair<Weight, VertexId>;
+    std::priority_queue<QE, std::vector<QE>, std::greater<QE>> pq;
+    dist[src] = 0;
+    pq.emplace(0, src);
+    while (!pq.empty()) {
+        auto [d, u] = pq.top();
+        pq.pop();
+        if (d != dist[u]) continue;
+        if (reverse) {
+            for (EdgeId eid : g.in_edges(u)) {
+                const Edge& e = g.edge(eid);
+                if (d + e.w < dist[e.src]) {
+                    dist[e.src] = d + e.w;
+                    pq.emplace(dist[e.src], e.src);
+                }
+            }
+        } else {
+            for (EdgeId eid : g.out_edges(u)) {
+                const Edge& e = g.edge(eid);
+                if (d + e.w < dist[e.dst]) {
+                    dist[e.dst] = d + e.w;
+                    pq.emplace(dist[e.dst], e.dst);
+                }
+            }
+        }
+    }
+    return dist;
+}
 
 struct DfsState {
     const Graph& g;
     VertexId t;
     Weight shortest;
     Weight best;
+    const std::vector<Weight>* to_t;  // shortest u->t distance; admissible bound
     std::vector<EdgeId> best_path;
     std::vector<char> on_path;
     std::vector<EdgeId> path_edges;
@@ -25,7 +67,18 @@ void dfs(DfsState& st, VertexId u, Weight cost) {
         }
         return;
     }
-    if (cost >= st.best) return;  // can't improve
+    // Admissible lower-bound (A*) pruning. Any completion of this prefix costs
+    // at least (*st.to_t)[u], so if that already fails to beat `best` the whole
+    // subtree can be skipped. This never prunes an optimal NSP: along its
+    // prefix, cost + to_t[u] <= (its total) < best whenever best has not yet
+    // reached that total.
+    //
+    // Without this the only bound was `cost >= best` with `best` starting at
+    // infinity, which on dense instances explored billions of nodes -- the
+    // reason this oracle used to be limited to |V| ~ 13.
+    const Weight h = (*st.to_t)[u];
+    if (h >= kInfWeight) return;         // t not reachable from u
+    if (cost + h >= st.best) return;     // cannot improve on best
     for (EdgeId eid : st.g.out_edges(u)) {
         const Edge& e = st.g.edge(eid);
         if (st.on_path[e.dst]) continue;
@@ -37,40 +90,6 @@ void dfs(DfsState& st, VertexId u, Weight cost) {
     }
 }
 
-struct ShortestDfsState {
-    const Graph& g;
-    VertexId t;
-    Weight best;
-    std::vector<char> on_path;
-};
-
-void shortest_dfs(ShortestDfsState& st, VertexId u, Weight cost) {
-    if (u == st.t) {
-        if (cost < st.best) st.best = cost;
-        return;
-    }
-    if (cost >= st.best) return;  // can't improve
-    for (EdgeId eid : st.g.out_edges(u)) {
-        const Edge& e = st.g.edge(eid);
-        if (st.on_path[e.dst]) continue;
-        st.on_path[e.dst] = 1;
-        shortest_dfs(st, e.dst, cost + e.w);
-        st.on_path[e.dst] = 0;
-    }
-}
-
-Weight shortest_cost(const Graph& g, VertexId s, VertexId t) {
-    // Recursive DFS over simple s->t paths with branch-and-bound on `best`.
-    // Same exponential worst case as Dijkstra-via-brute-force, but
-    // self-contained and structurally identical to dfs() above. We could
-    // call Dijkstra here for an O((V+E) log V) shortcut; we don't because
-    // brute_force.cpp is meant to be a minimal-dependency oracle.
-    ShortestDfsState st{g, t, kInfWeight, std::vector<char>(g.num_vertices(), 0)};
-    st.on_path[s] = 1;
-    shortest_dfs(st, s, 0);
-    return st.best;
-}
-
 }  // namespace
 
 NspResult brute_force_nsp(const Graph& g, VertexId s, VertexId t, VertexId vertex_cap) {
@@ -78,12 +97,22 @@ NspResult brute_force_nsp(const Graph& g, VertexId s, VertexId t, VertexId verte
         throw std::length_error(
             "brute_force_nsp: graph exceeds vertex_cap (raise it explicitly to override)");
     }
+    // Range-check the terminals. Without this an out-of-range s or t indexes
+    // past the end of the distance vector -- an out-of-bounds write in the
+    // Dijkstra seed, not merely a bad answer -- and nsp-cli forwards --s/--t
+    // unvalidated.
+    if (s < 0 || s >= g.num_vertices() || t < 0 || t >= g.num_vertices()) {
+        throw std::out_of_range("brute_force_nsp: s or t out of range");
+    }
     NspResult r;
     if (s == t) return r;
-    r.shortest_cost = shortest_cost(g, s, t);
+
+    const std::vector<Weight> to_t = dijkstra_local(g, t, /*reverse=*/true);
+    r.shortest_cost = to_t[s];
     if (r.shortest_cost >= kInfWeight) return r;
 
-    DfsState st{g, t, r.shortest_cost, kInfWeight, {}, std::vector<char>(g.num_vertices(), 0), {}};
+    DfsState st{g,  t, r.shortest_cost, kInfWeight, &to_t, {},
+                std::vector<char>(g.num_vertices(), 0), {}};
     st.on_path[s] = 1;
     dfs(st, s, 0);
 
