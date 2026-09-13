@@ -26,8 +26,7 @@ weights uniformly drawn from $[1, 10]$.
 The source tree is split into small modules under \texttt{src/}:
 \texttt{graph/} (a directed graph with adjacency lists indexed by stable
 edge IDs and both out- and in-neighbour lists), \texttt{shortest\_path/}
-(Dijkstra forward and reverse, plus a routine to extract the
-shortest-path DAG), \texttt{two\_vdp/} (2-VDP-in-DAG and a
+(Dijkstra forward and reverse), \texttt{two\_vdp/} (2-VDP-in-DAG and a
 brute-force oracle for it), \texttt{cwz/} (reductions and the layered
 NSP algorithm), \texttt{baseline/} (brute force and Yen), and
 \texttt{cli/} (a thin \texttt{nsp-cli} wrapper). Graph generators live
@@ -239,8 +238,8 @@ $O(|V|^{2}+|V||E|)$ time and $O(|V|^{2})$ memory per call.
 
 The project ships:
 \begin{itemize}
-  \item $114$ unit tests covering the graph data structure, both
-    Dijkstras, the shortest-path DAG, 2-VDP ($52$ tests), both
+  \item $110$ unit tests covering the graph data structure, both
+    Dijkstras, 2-VDP ($54$ tests), both
     reductions (including that \textsc{NextSP-Straight} removes
     forward/sideways back-edges and records the right candidates), the
     layered NSP algorithm on hand-built examples, both baselines, and

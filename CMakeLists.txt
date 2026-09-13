@@ -17,7 +17,6 @@ include_directories(${CMAKE_SOURCE_DIR}/src)
 add_library(cwz_core STATIC
     src/graph/graph.cpp
     src/shortest_path/dijkstra.cpp
-    src/shortest_path/sp_dag.cpp
     src/baseline/brute_force.cpp
     src/baseline/yen.cpp
     src/two_vdp/two_vdp.cpp
@@ -41,7 +40,6 @@ FetchContent_MakeAvailable(googletest)
 add_executable(unit_tests
     tests/unit/test_graph.cpp
     tests/unit/test_dijkstra.cpp
-    tests/unit/test_sp_dag.cpp
     tests/unit/test_brute_force.cpp
     tests/unit/test_yen.cpp
     tests/unit/test_generators.cpp

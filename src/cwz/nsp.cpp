@@ -5,7 +5,6 @@
 
 #include "cwz/reductions.h"
 #include "shortest_path/dijkstra.h"
-#include "shortest_path/sp_dag.h"
 #include "two_vdp/two_vdp.h"
 
 namespace cwz {
