@@ -107,8 +107,7 @@ for s in $(seq 3001 3005); do ./build/fuzz_cwz_vs_brute  800 14 $s; done
 
 ## Thesis
 
-LaTeX source lives in `thesis/`; see `thesis/README.md` for template
-candidates. To build (requires `pdflatex` + `bibtex`):
+LaTeX source lives in `thesis/`. To build (requires `pdflatex` + `bibtex`):
 
 ```bash
 cd thesis
