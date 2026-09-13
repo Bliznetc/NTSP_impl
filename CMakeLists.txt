@@ -21,6 +21,7 @@ add_library(cwz_core STATIC
     src/baseline/brute_force.cpp
     src/baseline/yen.cpp
     src/two_vdp/two_vdp.cpp
+    src/two_vdp/brute_force_two_vdp.cpp
     src/cwz/reductions.cpp
     src/cwz/nsp.cpp
     generators/generators.cpp

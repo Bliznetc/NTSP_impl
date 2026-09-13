@@ -1,170 +1,119 @@
 #include "two_vdp/two_vdp.h"
 
 #include <algorithm>
-#include <queue>
-#include <unordered_map>
+#include <cstddef>
+#include <limits>
+#include <stdexcept>
 
 namespace cwz {
 
 namespace {
 
-// Internal flow network. Each original vertex v is split into v_in (id 2v) and
-// v_out (id 2v+1), connected by a capacity-1 edge (the vertex itself), except
-// for s1, s2, t1, t2 which get unbounded capacity (we use 2). For each
-// original edge (u, v) we add a capacity-1 edge from u_out to v_in.
-// Super-source has id 2n, super-sink has id 2n+1.
-//
-// We store the network as a Dinic-style list of (to, cap, rev_index) tuples.
-
-struct FlowEdge {
-    int to;
-    int cap;
-    int rev;
-    EdgeId orig_edge;  // kNoEdge for vertex-split / super-source / super-sink edges
-};
-
-struct FlowNet {
-    std::vector<std::vector<FlowEdge>> adj;
-    int n;  // total nodes including super source/sink
-    int src;
-    int snk;
-
-    void add(int u, int v, int cap, EdgeId orig = kNoEdge) {
-        adj[u].push_back({v, cap, static_cast<int>(adj[v].size()), orig});
-        adj[v].push_back({u, 0, static_cast<int>(adj[u].size()) - 1, kNoEdge});
+// Topological position of each vertex (Kahn). Self-loops are ignored; any
+// other cycle throws std::invalid_argument.
+std::vector<VertexId> topological_positions(const Graph& g) {
+    const VertexId n = g.num_vertices();
+    std::vector<VertexId> indeg(n, 0);
+    for (EdgeId i = 0; i < g.num_edges(); ++i) {
+        const Edge& e = g.edge(i);
+        if (e.src != e.dst) ++indeg[e.dst];
     }
-};
-
-bool bfs_for_aug(FlowNet& net, std::vector<int>& parent_node, std::vector<int>& parent_idx) {
-    std::fill(parent_node.begin(), parent_node.end(), -1);
-    std::fill(parent_idx.begin(), parent_idx.end(), -1);
-    parent_node[net.src] = net.src;
-    std::queue<int> q;
-    q.push(net.src);
-    while (!q.empty()) {
-        int u = q.front();
-        q.pop();
-        for (int i = 0; i < static_cast<int>(net.adj[u].size()); ++i) {
-            const FlowEdge& e = net.adj[u][i];
-            if (e.cap > 0 && parent_node[e.to] == -1) {
-                parent_node[e.to] = u;
-                parent_idx[e.to] = i;
-                if (e.to == net.snk) return true;
-                q.push(e.to);
-            }
+    std::vector<VertexId> order;
+    order.reserve(n);
+    for (VertexId v = 0; v < n; ++v)
+        if (indeg[v] == 0) order.push_back(v);
+    for (std::size_t head = 0; head < order.size(); ++head) {
+        VertexId u = order[head];
+        for (EdgeId eid : g.out_edges(u)) {
+            const Edge& e = g.edge(eid);
+            if (e.src == e.dst) continue;
+            if (--indeg[e.dst] == 0) order.push_back(e.dst);
         }
     }
-    return false;
+    if (static_cast<VertexId>(order.size()) != n)
+        throw std::invalid_argument("two_vdp_in_dag: graph is not acyclic");
+    std::vector<VertexId> pos(n);
+    for (VertexId i = 0; i < n; ++i) pos[order[i]] = i;
+    return pos;
 }
+
+constexpr EdgeId kUnvisited = -1;
+constexpr EdgeId kStartState = -2;
 
 }  // namespace
 
 std::optional<TwoVdpResult> two_vdp_in_dag(const Graph& g,
                                            VertexId s1, VertexId t1,
                                            VertexId s2, VertexId t2) {
+    // A shared terminal makes the pair infeasible.
     if (s1 == s2 || t1 == t2 || s1 == t2 || s2 == t1) return std::nullopt;
 
-    const int n = g.num_vertices();
-    FlowNet net;
-    net.n = 2 * n + 2;
-    net.src = 2 * n;
-    net.snk = 2 * n + 1;
-    net.adj.assign(net.n, {});
+    const VertexId n = g.num_vertices();
+    auto in_range = [n](VertexId v) { return v >= 0 && v < n; };
+    if (!in_range(s1) || !in_range(t1) || !in_range(s2) || !in_range(t2))
+        throw std::out_of_range("two_vdp_in_dag: terminal out of range");
 
-    auto v_in = [](int v) { return 2 * v; };
-    auto v_out = [](int v) { return 2 * v + 1; };
+    const std::vector<VertexId> pos = topological_positions(g);
 
-    // Vertex-split edges (capacity 1 for every vertex, including the
-    // prescribed endpoints). Combined with the capacity-1 super-source
-    // feeders and capacity-1 super-sink drains, this enforces that each of
-    // s1, s2, t1, t2 carries at most one unit of flow -- i.e., is used by
-    // exactly one commodity, never crossed by the other. This is the
-    // standard reduction; an earlier version of this file gave the endpoints
-    // capacity 2, which allowed max-flow to spuriously return 2 on
-    // instances where a path s_i -> t_i had to pass through the other
-    // commodity's source. The trace fallback below happened to mask that
-    // upstream bug in practice, but the formulation is now correct by
-    // construction.
-    for (int v = 0; v < n; ++v) {
-        net.add(v_in(v), v_out(v), 1);
-    }
-    // Edge capacities.
-    for (EdgeId i = 0; i < g.num_edges(); ++i) {
-        const Edge& e = g.edge(i);
-        net.add(v_out(e.src), v_in(e.dst), 1, i);
-    }
-    // Super source -> commodity sources (capacity 1 each), commodity sinks -> super sink.
-    net.add(net.src, v_in(s1), 1);
-    net.add(net.src, v_in(s2), 1);
-    net.add(v_out(t1), net.snk, 1);
-    net.add(v_out(t2), net.snk, 1);
+    if (s1 == t1 && s2 == t2) return TwoVdpResult{};
 
-    std::vector<int> parent_node(net.n, -1), parent_idx(net.n, -1);
-    int flow = 0;
-    while (flow < 2 && bfs_for_aug(net, parent_node, parent_idx)) {
-        // augment along the path
-        int cur = net.snk;
-        while (cur != net.src) {
-            int p = parent_node[cur];
-            int idx = parent_idx[cur];
-            net.adj[p][idx].cap--;
-            FlowEdge& rev = net.adj[cur][net.adj[p][idx].rev];
-            rev.cap++;
-            cur = p;
-        }
-        flow++;
-    }
-    if (flow < 2) return std::nullopt;
-
-    // Decompose flow into two paths by tracing forward from s1 and s2.
-    // Each commodity source has out-flow 1 on its super-source feeder, so
-    // there's a unique outgoing path along edges with reduced capacity (cap
-    // dropped from 1 to 0). For vertex-split edges, an edge from v_in to
-    // v_out with non-zero reduced flow is currently 0 cap; we track flow by
-    // looking at non-zero cap on the reverse edge.
-    auto trace = [&](VertexId src_v, VertexId snk_v) -> std::vector<EdgeId> {
-        std::vector<EdgeId> result;
-        int cur = v_out(src_v);
-        std::vector<char> visited(net.n, 0);
-        while (cur != v_out(snk_v) && cur != v_in(snk_v)) {
-            // The "real" current vertex is v with cur = v_in(v) or v_out(v).
-            // From v_out(v) we should go to some v_in(u) along an original edge
-            // that has flow on it (reverse cap > 0 means original cap consumed).
-            if (visited[cur]) return {};
-            visited[cur] = 1;
-            bool advanced = false;
-            for (FlowEdge& e : net.adj[cur]) {
-                if (e.orig_edge != kNoEdge && e.cap == 0 && e.to != net.src) {
-                    // This is a saturated forward edge (originally cap 1, now 0).
-                    // Take it if not visited.
-                    if (visited[e.to]) continue;
-                    result.push_back(e.orig_edge);
-                    // Now we're at v_in(dst). Move through the vertex-split to v_out(dst).
-                    int dst_v_in = e.to;
-                    if (visited[dst_v_in]) return {};
-                    visited[dst_v_in] = 1;
-                    int dst_v_out = dst_v_in + 1;  // by construction
-                    cur = dst_v_out;
-                    advanced = true;
-                    break;
-                }
-            }
-            if (!advanced) return {};
-            if (cur == v_out(snk_v)) break;
-        }
-        return result;
+    const std::size_t N = static_cast<std::size_t>(n);
+    if (N > std::numeric_limits<std::size_t>::max() / N)
+        throw std::length_error("two_vdp_in_dag: state space too large");
+    auto idx = [N](VertexId u, VertexId v) {
+        return static_cast<std::size_t>(u) * N + static_cast<std::size_t>(v);
     };
 
-    TwoVdpResult r;
-    r.p1 = trace(s1, t1);
-    r.p2 = trace(s2, t2);
-    if (r.p1.empty() || r.p2.empty()) {
-        // Tracing failed (rare; flow decomposition can be ambiguous). Fall back
-        // to a simpler check: report feasibility but with empty paths.
-        // For correctness of higher-level NSP, we need the actual paths; if
-        // tracing failed, signal infeasible.
-        if (s1 != t1 && s2 != t2) return std::nullopt;
+    // parent[idx(u,v)]: edge that first reached state (u,v).
+    std::vector<EdgeId> parent(N * N, kUnvisited);
+    std::vector<std::size_t> stack;
+    const std::size_t start = idx(s1, s2);
+    const std::size_t target = idx(t1, t2);
+    parent[start] = kStartState;
+    stack.push_back(start);
+
+    bool found = false;
+    while (!stack.empty() && !found) {
+        const std::size_t cur = stack.back();
+        stack.pop_back();
+        const VertexId u = static_cast<VertexId>(cur / N);
+        const VertexId v = static_cast<VertexId>(cur % N);
+
+        // Advance the head earlier in topological order (a head at its target stays).
+        // The other path's earlier vertices all precede this head, so only its
+        // current head can collide.
+        const bool move_p1 = (u != t1) && (v == t2 || pos[u] < pos[v]);
+        const VertexId head = move_p1 ? u : v;
+        const VertexId other = move_p1 ? v : u;
+        for (EdgeId eid : g.out_edges(head)) {
+            const VertexId w = g.edge(eid).dst;
+            if (w == head || w == other) continue;
+            const std::size_t nxt = move_p1 ? idx(w, v) : idx(u, w);
+            if (parent[nxt] != kUnvisited) continue;
+            parent[nxt] = eid;
+            if (nxt == target) {
+                found = true;
+                break;
+            }
+            stack.push_back(nxt);
+        }
     }
+    if (!found) return std::nullopt;
+
+    TwoVdpResult r;
+    VertexId u = t1, v = t2;
+    for (EdgeId eid = parent[target]; eid != kStartState; eid = parent[idx(u, v)]) {
+        const Edge& e = g.edge(eid);
+        if (e.dst == u) {
+            r.p1.push_back(eid);
+            u = e.src;
+        } else {
+            r.p2.push_back(eid);
+            v = e.src;
+        }
+    }
+    std::reverse(r.p1.begin(), r.p1.end());
+    std::reverse(r.p2.begin(), r.p2.end());
     return r;
 }
 
