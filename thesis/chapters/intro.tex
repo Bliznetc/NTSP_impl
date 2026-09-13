@@ -21,8 +21,8 @@ problem becomes \emph{NP-complete} as soon as zero-weight edges are
 admitted in a directed graph~\cite{LalgudiPapaefthymiou1997}, and the
 \emph{strictly} positively weighted directed case had remained open for nearly
 thirty years. Polynomial-time algorithms were known only for undirected
-graphs~\cite{KrasikovNoble2004} and for planar directed
-graphs~\cite{Wu2010}; the general directed positively-weighted case was
+graphs~\cite{KrasikovNoble2004,Wu2010} and for planar directed
+graphs~\cite{WuWang2015}; the general directed positively-weighted case was
 resolved only recently by Chen, Wein, and Zhang~\cite{ChenWeinZhang2025},
 whose algorithm runs in $O\bigl(|V|^{4}|E|^{3}\log|V|\bigr)$ time.
 
@@ -63,7 +63,6 @@ Chapter~\ref{ch:litreview} surveys prior work on NSP and related shortest-path
 problems. Chapter~\ref{ch:algorithm} describes the CWZ algorithm, including
 its two reductions, its key Lemma~5.3, and the role of $2$-vertex-disjoint
 paths in directed acyclic graphs. Chapter~\ref{ch:implementation} discusses
-implementation choices, why the $6$-tuple enumeration alone
-suffices once the reduction emits a strictly layered graph, and the single
-remaining approximation. Chapter~\ref{ch:experiments} reports empirical
+implementation choices and why the $6$-tuple enumeration alone
+suffices once the reduction emits a strictly layered graph. Chapter~\ref{ch:experiments} reports empirical
 results across graph families. Chapter~\ref{ch:conclusion} concludes.

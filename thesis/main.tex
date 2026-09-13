@@ -29,6 +29,18 @@
 \usepackage[htt]{hyphenat}
 \setlength{\emergencystretch}{3em}
 
+% Float placement. Every figure/table was using the default [tbp], which
+% forbids "here": with several large floats in one chapter LaTeX deferred them
+% until Figure 5.1 appeared a full section after the text that discusses it,
+% leaving most of a page blank. [section] keeps a float inside the section that
+% refers to it, and the relaxed fractions let a page carry more float and less
+% text before LaTeX gives up and defers.
+\usepackage[section]{placeins}
+\renewcommand{\topfraction}{0.9}
+\renewcommand{\bottomfraction}{0.8}
+\renewcommand{\textfraction}{0.07}
+\renewcommand{\floatpagefraction}{0.75}
+
 \newtheorem{theorem}{Theorem}[chapter]
 \newtheorem{lemma}[theorem]{Lemma}
 \newtheorem{definition}[theorem]{Definition}

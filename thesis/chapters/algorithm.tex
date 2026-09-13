@@ -129,7 +129,9 @@ graph} (2-VDP-in-DAG): given a DAG and two source-sink pairs $(s_1,t_1)$ and
 $(s_2,t_2)$, decide whether vertex-disjoint $s_1\to t_1$ and $s_2\to t_2$
 paths exist, and if so output them. Tholey~\cite{Tholey2012} solves this in
 $O(|V|+|E|)$ time. The CWZ paper uses Tholey's bound, yielding an overall
-complexity of $O(|V|^{4}|E|^{3}\log|V|)$.
+complexity of $O(|V|^{4}|E|^{3}\log|V|)$. Our implementation uses the
+Fortune--Hopcroft--Wyllie algorithm instead, which takes
+$O(|V|^{2}+|V||E|)$ time per call (Section~\ref{sec:twovdp}).
 
 The paper notes explicitly that the bound is not optimized for practice:
 ``Our focus was to obtain a polynomial-time algorithm rather than to optimize

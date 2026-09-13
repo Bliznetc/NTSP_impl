@@ -4,11 +4,8 @@
 \section{Shortest paths}
 
 Single-source shortest paths in directed graphs with non-negative weights are
-classically solved by Dijkstra's algorithm in
-$O((|V|+|E|)\log|V|)$ time using a binary heap, or $O(|V|\log|V|+|E|)$ with a
-Fibonacci heap~\cite{Dijkstra1959, FredmanTarjan1987}. We rely on the
-former; for our typical graph sizes the asymptotic improvement of Fibonacci
-heaps is not worth the constant factor.
+classically solved by Dijkstra's algorithm~\cite{Dijkstra1959}, which we use
+throughout in its binary-heap form, running in $O((|V|+|E|)\log|V|)$ time.
 
 \section{$k$-shortest simple paths}
 
@@ -35,10 +32,13 @@ Papaefthymiou~\cite{LalgudiPapaefthymiou1997} soon after showed it is
 NP-complete in directed graphs with non-negative weights (in
 particular, when zero weights are permitted). The undirected case admits a
 polynomial-time algorithm: Krasikov and Noble~\cite{KrasikovNoble2004}
-gave an $O(n^3 m)$-time algorithm; Wu's later
-work~\cite{Wu2010} brings the bound down to $O(nm)$ on undirected graphs.
-For \emph{planar} directed graphs with positive weights, Wu also gives a
-polynomial-time algorithm.
+gave the first, running in $O(n^3 m)$ time, and a sequence of improvements
+brought this down to $O(n^3)$, then $O(n^2)$, and finally to
+$O(n\log n + m)$ by Wu~\cite{Wu2010}. For \emph{planar} directed graphs
+with positive weights, Wu and Wang~\cite{WuWang2015} gave a
+polynomial-time algorithm; they also established structural properties of
+solutions on general positively weighted digraphs, but no further progress
+followed until Chen, Wein and Zhang.
 
 For \emph{general} directed graphs with strictly positive weights, the
 problem remained open for nearly three decades. Chen, Wein, and Zhang
@@ -58,7 +58,6 @@ gave the first polynomial-time algorithm for the $k$-vertex-disjoint-paths
 problem in DAGs for fixed $k$. Tholey~\cite{Tholey2012} subsequently gave a
 linear-time algorithm for the special case $k=2$. The CWZ paper cites Tholey
 for the $O(|V|+|E|)$ bound on the inner subroutine. In the present work we
-substitute a simpler max-flow-based 2-VDP that costs an extra factor of
-$O(|V|+|E|)$ per invocation; this preserves correctness while raising the
-overall complexity by a small polynomial factor relative to the paper's
-tight bound.
+implement the simpler Fortune--Hopcroft--Wyllie algorithm for two paths,
+which runs in $O(|V|^{2}+|V||E|)$ time (Section~\ref{sec:twovdp}), so our
+implementation does not attain the paper's bound.

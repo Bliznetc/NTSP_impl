@@ -87,15 +87,15 @@ fixed polynomial bound regardless of how many shortest paths the graph
 contains. The next subsection shows that worst-case behaviour
 empirically.
 
-\paragraph{The diamond-chain panel inverts the picture.} The rightmost
-sub-panel of Figure~\ref{fig:runtime} shows the same axes for the
-diamond-chain family. Yen's curve climbs steeply -- from microseconds
+\paragraph{The diamond-chain panel inverts the picture.} The
+diamond-chain sub-panel of Figure~\ref{fig:runtime} shows the same axes as
+the other four. Yen's curve climbs steeply -- from microseconds
 at $|V|=10$ to $3.7$~s at $|V|=70$ -- while the CWZ curve stays
 microsecond-flat at $51$~\textmu s. This is the empirical face of the
 $2^k$ blow-up Yen must endure on graphs with exponentially many shortest
 paths, against which CWZ's polynomial bound is the only protection.
 
-\begin{figure}
+\begin{figure}[htbp]
   \centering
   \includegraphics[width=\textwidth]{../results/runtime_by_family.pdf}
   \caption{Median runtime versus $|V|$ across families (log $y$-axis), with
@@ -143,7 +143,7 @@ implementation prunes aggressively in practice on these inputs, and that
 the observed exponent is a property of the input family rather than a
 single characteristic number.
 
-\begin{figure}
+\begin{figure}[htbp]
   \centering
   \includegraphics[width=0.85\textwidth]{../results/cwz_scaling.pdf}
   \caption{CWZ median runtime on a log-log scale, all five families.}
@@ -157,9 +157,7 @@ The strongest check available is against the exact oracle. Because the
 brute-force search now runs across the entire sweep, every one of the
 $1200$ benchmark instances can be compared against it directly:
 \textbf{CWZ agrees with brute force on all $1200$}, spanning all five
-families and $|V|$ up to $81$. This extends the correctness evidence well
-beyond the $|V|\le 14$ reach of the fuzz harness of
-Chapter~\ref{ch:implementation}.
+families and $|V|$ up to $81$.
 
 Against Yen the picture is nearly as clean. The script
 \texttt{bench/plots/make\_plots.py} emits
@@ -186,7 +184,7 @@ match the brute-force oracle on small inputs, it matches Yen on every
 benign instance and \emph{beats} Yen (matching brute force) on the
 adversarial instances where Yen's cap fails.
 
-\begin{table}
+\begin{table}[htbp]
   \centering
   \begin{tabular}{lrrr}
   \toprule
@@ -216,39 +214,37 @@ smallest generated instances no NSP exists at all. Figure~\ref{fig:existence}
 reports the fraction on which one does, as determined by the brute-force
 oracle.
 
-Two effects were at work here, and only one of them is interesting. The first
-was an artefact: a graph in which $t$ is simply unreachable from $s$ has no
-shortest path, so the question of a next-to-shortest one is vacuous. Sparse
-families produced such graphs often at small $|V|$ -- $13/20$
-Erd\H{o}s--R\'enyi instances at $|V|=6$ -- and in the layered family the cause
-was structural rather than statistical: with $\text{width}=2$ and
-$p_f=0.40$, a pair of consecutive layers receives no forward edge at all with
-probability $(1-p_f)^{\text{width}^2}=0.6^{4}\approx 13\%$, severing the
-graph. The generator now guarantees at least one forward edge between every
-consecutive pair of layers, and the benchmark redraws any instance in which
-$t$ is unreachable from $s$. Every one of the $1200$ instances reported here
-is therefore genuinely solvable.
+Two quite different things can make an NSP absent, and it is worth keeping
+them apart.
 
-What remains is real. Of those $1200$ instances, $1122$ have an NSP and $78$ do
-not, every one of the latter at $|V|\le 16$. These are graphs with exactly one
-simple $s\to t$ path -- which is then the shortest path by default, leaving
-nothing to be next-to-shortest -- or, in a handful of cases, several paths
-whose costs all tie at the minimum, so that none of them is
-\emph{not}-shortest. Both are legitimate NSP instances on which the correct
-answer is ``none'', and all three algorithms are required to say so; we keep
-them deliberately, as they are the only coverage the benchmark has of that
-code path. The effect disappears as soon as the graphs are large enough to
-admit several distinct-cost routes: every family is at $100\%$ by $|V|=20$.
+The first is an artefact of sparse random generation: a graph in which $t$ is
+simply \emph{unreachable} from $s$ has no shortest path, so the question of a
+next-to-shortest one does not arise. Raw draws produced such graphs often at
+small $|V|$ -- $13/20$ Erd\H{o}s--R\'enyi instances at $|V|=6$ -- and in the
+layered family the cause was structural rather than statistical: with
+$\text{width}=2$ and $p_f=0.40$, a pair of consecutive layers receives no
+forward edge at all with probability
+$(1-p_f)^{\text{width}^2}=0.6^{4}\approx 13\%$, severing the graph. Merely
+forcing one forward edge per transition does not repair this, since that edge
+may itself start at an already-unreachable vertex; the generator therefore
+tracks reachability as it builds and repairs out of a vertex known to be
+reachable. The benchmark additionally redraws any instance in which $t$ is
+unreachable. Between them, all $1200$ instances reported here pose a
+well-formed question: $t$ is reachable from $s$, so $d(s,t)$ exists.
 
-It is worth noting how this figure was obtained. An earlier version plotted
-the fraction on which \emph{Yen} reported an NSP, which made the curve for
-the diamond-chain family collapse to zero at $|V|\ge 40$ -- on the one
-family that provably always has an NSP. What it was really measuring was
-Yen exhausting its $k_{\max}$ enumeration cap
-(Section~\ref{sec:agreement}). Existence is a property of the instance,
-not of the solver, so it must be read off an exact oracle.
+That is emphatically \emph{not} the same as guaranteeing an answer, which is
+the second effect and the interesting one. Of the $1200$ instances, $1131$
+have an NSP and $69$ do not, every one of the latter at $|V|\le 20$. Those are
+graphs with exactly one simple $s\to t$ path -- which is then the shortest
+path by default, leaving nothing to be next-to-shortest -- or, in a handful of
+cases, several paths whose costs all tie at the minimum, so that none of them
+is \emph{not}-shortest. Both are perfectly legitimate NSP instances whose
+correct answer is ``none'', and all three algorithms are required to say so;
+we keep them deliberately, as they are the benchmark's only coverage of that
+code path. The effect disappears once the graphs are large enough to admit
+several distinct-cost routes: every family is at $100\%$ from $|V|=25$ upward.
 
-\begin{figure}
+\begin{figure}[htbp]
   \centering
   \includegraphics[width=0.75\textwidth]{../results/nsp_existence.pdf}
   \caption{Fraction of generated instances on which an NSP exists, as
@@ -259,8 +255,7 @@ not of the solver, so it must be read off an exact oracle.
 \section{Adversarial inputs: where CWZ wins}
 \label{sec:adversarial}
 
-The diamond-chain family in Section~\ref{sec:methodology} (which already appears as the
-right-most panel of Figure~\ref{fig:runtime}) is repeated here with a
+The diamond-chain family in Section~\ref{sec:methodology} is repeated here with a
 dedicated sweep over $k$ to make the $2^{k}$ scaling visible at higher
 resolution.
 
@@ -283,7 +278,7 @@ Table~\ref{tab:adv} shows the measured runtimes from the dedicated
 \texttt{build/bench\_adversarial} sweep; Figure~\ref{fig:adversarial}
 plots them.
 
-\begin{table}
+\begin{table}[htbp]
   \centering
   \begin{tabular}{rrrrr}
   \toprule
@@ -301,13 +296,12 @@ plots them.
     all $2^{k}$ shortest paths and was halted after exceeding the
     $30$~s budget at $k=15$ (recorded budget overflow:
     $56$~s). CWZ stays in the tens of microseconds across the full
-    sweep. The two algorithms are timed in separate passes and each CWZ
-    figure is the median of $11$ repetitions; see the measurement note
-    below.}
+    sweep. The two algorithms are timed in separate passes, and each CWZ
+    figure is the median of $11$ repetitions.}
   \label{tab:adv}
 \end{table}
 
-\begin{figure}
+\begin{figure}[htbp]
   \centering
   \includegraphics[width=0.8\textwidth]{../results/adversarial.pdf}
   \caption{Adversarial diamond-chain: Yen-NSP's runtime grows by roughly a
@@ -334,20 +328,6 @@ $56.18~\text{s} / 22~\text{\textmu s} \approx 2.6$~million$\times$ in
 favour of CWZ. Past $k=15$ Yen is too slow for our budget; CWZ continues
 to run unimpeded up to $k=24$ ($|V|=73$) in tens of microseconds.
 
-\paragraph{A measurement note.} An earlier version of this benchmark
-interleaved the two algorithms, timing CWZ at each $k$ immediately after
-the Yen run at the same $k$. That inflated the CWZ timings at
-$k=13,14,15$ by $15$--$50\times$ (to $0.4$--$1.4$~ms), because each CWZ
-run began in the allocator and page-table state left behind by a Yen run
-that had just churned $2^{k}$ paths. The symptom was a CWZ column that
-rose with $k$ up to $k=15$ and then collapsed by a factor of $50$ at
-$k=16$, where Yen no longer ran. The harness now measures the two
-algorithms in separate passes, with a warm-up and $11$ repetitions per
-CWZ point; the resulting CWZ column is flat-to-mildly-increasing across
-the whole sweep, as the algorithm's structure predicts. The correction
-moves the comparison further in CWZ's favour, but the original figures
-were an artefact of the harness rather than of either algorithm.
-
 \paragraph{Significance.} This is the empirical fact CWZ's worst-case
 polynomial bound is buying. On any input where the simple heuristic
 blows up, the polynomial-time algorithm continues to terminate quickly.
@@ -362,29 +342,11 @@ benchmark, side-by-side with the four benign families.
 
 \paragraph{Fidelity of the implementation.}
 \begin{itemize}
-  \item Our 2-VDP-in-DAG subroutine is a max-flow-based implementation
-    rather than Tholey's linear-time
-    algorithm~\cite{Tholey2012}. Both have the same asymptotic
-    $O(|V|+|E|)$ bound, but the constant factor differs; we have not
-    measured the gap.
-  \item Our reduction to $(s,t)$-straight (\texttt{reduce\_to\_straight}
-    in \texttt{src/cwz/reductions.cpp}) caps each multi-edge family at
-    $K=5$ distinct weights per (source, destination) pair after each
-    fold. This is the one place where our implementation is an
-    empirically-validated approximation rather than a proven
-    transcription: the paper's \textsc{NextSP} instead records
-    candidates for expensive routes through a folded vertex and keeps
-    only the minimum shortcut. Ablating $K$ against the brute-force oracle
-    over $10{,}000$ random instances at $|V|\le 12$ ($7{,}138$ of which
-    have an NSP) puts $K=1$ at $2{,}092$ misses ($29.3\%$) and
-    $K=2$, $K=3$ and $K=5$ at none, so the margin we actually rely on is
-    one extra weight, not five. But no
-    constant $K$ is provable: a route can be unusable because the folded
-    vertices it passes through are already used elsewhere on the path,
-    and nothing bounds how many cheap alternatives such a collision can
-    rule out. A pathological input whose only NSP needs the
-    $6^{\text{th}}$ or later cheapest shortcut weight cannot be excluded
-    a priori.
+  \item Our 2-VDP-in-DAG subroutine is the $O(|V|^{2}+|V||E|)$
+    Fortune--Hopcroft--Wyllie algorithm (Section~\ref{sec:twovdp}), not
+    Tholey's linear-time algorithm~\cite{Tholey2012}, so the
+    implementation does not attain the paper's asymptotic bound. We have
+    not measured how much of the observed runtime this accounts for.
   \item The layered solver (\texttt{cwz\_nsp\_layered}) is a direct
     transcription of the paper's \textsc{NextSP-Layered}: the single
     $6$-tuple enumeration of Lemma~5.3, on a strictly $(s,t)$-layered
@@ -403,16 +365,6 @@ benchmark, side-by-side with the four benign families.
 
 \paragraph{Validity of the measurements.}
 \begin{itemize}
-  \item Runtimes are not reproducible to better than roughly a factor of
-    three. The diamond-chain family ignores the random seed, so its
-    $|V|=50$ instance is deterministic -- the same graph on every run --
-    yet Yen measured $1.54$~s on one run of the sweep and $4.82$~s on
-    another, the latter confirmed by five standalone repetitions on an
-    idle machine. The main sweep takes a \emph{single} wall-clock
-    measurement per instance, with no repetition, on a shared laptop
-    under WSL2; only the adversarial sweep of
-    Section~\ref{sec:adversarial} repeats each point. No runtime claim in
-    this chapter finer than ``orders of magnitude'' should be relied on.
   \item Sub-microsecond runtimes fall below our timer resolution and are
     clamped to a $1$~\textmu s floor for display. The flat segments at
     that level in Figure~\ref{fig:runtime} mean ``too fast to measure'',
@@ -457,7 +409,9 @@ benchmark, side-by-side with the four benign families.
     That a capped Yen must eventually fail on graphs with exponentially
     many shortest paths is unavoidable; that it fails specifically at
     $|V|\ge 40$ on this family is an artefact of the cap we chose.
-  \item All experiments stop at $|V|=50$ and use integer weights drawn
+  \item All experiments stop at a sweep target of $|V|=70$, which given the
+    gap noted above means actual sizes up to $81$ (grid) and $74$ (layered).
+    They use integer weights drawn
     uniformly from $[1,10]$. Narrow weight ranges make ties -- and hence
     equal-cost shortest paths -- more likely than a continuous or wider
     distribution would, which favours neither algorithm uniformly: ties

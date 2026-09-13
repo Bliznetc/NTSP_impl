@@ -27,8 +27,8 @@ The source tree is split into small modules under \texttt{src/}:
 \texttt{graph/} (a directed graph with adjacency lists indexed by stable
 edge IDs and both out- and in-neighbour lists), \texttt{shortest\_path/}
 (Dijkstra forward and reverse, plus a routine to extract the
-shortest-path DAG), \texttt{two\_vdp/} (2-VDP-in-DAG via
-vertex-capacitated max-flow), \texttt{cwz/} (reductions and the layered
+shortest-path DAG), \texttt{two\_vdp/} (2-VDP-in-DAG and a
+brute-force oracle for it), \texttt{cwz/} (reductions and the layered
 NSP algorithm), \texttt{baseline/} (brute force and Yen), and
 \texttt{cli/} (a thin \texttt{nsp-cli} wrapper). Graph generators live
 under \texttt{generators/}; unit tests under \texttt{tests/unit/};
@@ -118,32 +118,153 @@ rather than excluded up front. Tightening either of these silently loses
 NSPs whose first back-edge sits exactly one layer above its last.
 
 \section{The 2-VDP subroutine}
+\label{sec:twovdp}
 
-We solve 2-VDP-in-DAG by reduction to a max-flow problem. Each vertex
-is split in two with a capacity-1 edge between the halves -- capacity
-$1$ uniformly, including at the four prescribed endpoints, as in the
-standard reduction -- and each DAG
-edge becomes a capacity-1 edge in the flow network. A super-source and
-super-sink connect to the prescribed sources $\{s_1,s_2\}$ and sinks
-$\{t_1,t_2\}$ respectively. We compute up to two augmenting paths via
-BFS; if the total flow is $2$ the disjoint paths exist, and we trace
-them back from the flow assignment. This costs $O(|V|+|E|)$ per BFS, so
-$O(|V|+|E|)$ per 2-VDP call -- the same asymptotic class as Tholey's
-linear-time bound~\cite{Tholey2012}, with a higher constant factor but
-substantially simpler code.
+Given a DAG $D=(V,E)$ and vertices $s_1,t_1,s_2,t_2$, the subroutine
+must find paths $P_1\colon s_1\to t_1$ and $P_2\colon s_2\to t_2$ with
+$V(P_1)\cap V(P_2)=\emptyset$, or report that no such pair exists. The
+layered algorithm calls it on the subgraph of forward edges. That
+subgraph is acyclic: a forward edge $(u,v)$ satisfies
+$d(s,v)=d(s,u)+w(u,v)>d(s,u)$, since all weights are positive.
+
+We implement the algorithm of Fortune, Hopcroft and
+Wyllie~\cite{FortuneHopcroftWyllie1980} for two paths
+(\texttt{two\_vdp\_in\_dag}). It runs in $O(|V|^{2}+|V||E|)$ time, which
+is slower than Tholey's $O(|V|+|E|)$ algorithm~\cite{Tholey2012} but
+much shorter to implement.
+
+\paragraph{Algorithm.} If $s_1=s_2$, $t_1=t_2$, $s_1=t_2$ or $s_2=t_1$,
+some vertex would have to lie on both paths, and the answer is
+negative. Otherwise fix a topological order of $D$ and let $\pi(x)$ be
+the position of vertex $x$. A \emph{state} is a pair $(u,v)$ of distinct
+vertices, meaning that $P_1$ has been built from $s_1$ up to $u$ and
+$P_2$ from $s_2$ up to $v$. In a state $(u,v)\neq(t_1,t_2)$ exactly one
+of the two paths is extended:
+\begin{itemize}
+  \item $P_1$ is extended if $u\neq t_1$ and either $v=t_2$ or
+    $\pi(u)<\pi(v)$; this gives the moves $(u,v)\to(w,v)$ for every edge
+    $(u,w)\in E$ with $w\neq v$;
+  \item otherwise $P_2$ is extended, giving the moves $(u,v)\to(u,w)$
+    for every edge $(v,w)\in E$ with $w\neq u$.
+\end{itemize}
+In words, the path whose last vertex comes earlier in the topological
+order is extended, and a path that has reached its target is never
+extended again. If $P_2$ is extended then $v\neq t_2$: either $u\neq
+t_1$ and the rule forces it, or $u=t_1$ and then $v\neq t_2$ because the
+state is not $(t_1,t_2)$.
+
+The moves form a directed graph $H$ on at most $|V|(|V|-1)$ states. The
+algorithm runs a depth-first search in $H$ from $(s_1,s_2)$ and stores,
+for every state, the edge of $D$ through which the state was first
+reached. If $(t_1,t_2)$ is reached, the paths are recovered by following
+the stored edges back to $(s_1,s_2)$. Each stored edge ends in exactly
+one of the two current vertices, since $u\neq v$, and that tells us
+whether it belongs to $P_1$ or to $P_2$. If the search ends without
+reaching $(t_1,t_2)$, the answer is negative.
+
+\paragraph{Correctness.} A walk in $H$ starting at $(s_1,s_2)$ records
+two sequences of vertices of $D$, one for each path, by listing the
+vertices added by the moves.
+
+\begin{lemma}\label{lem:vdp-sound}
+For every walk in $H$ from $(s_1,s_2)$ to a state $(u,v)$, the recorded
+sequences are vertex-disjoint paths $P_1\colon s_1\to u$ and
+$P_2\colon s_2\to v$.
+\end{lemma}
+
+\begin{proof}
+Induction on the length of the walk. Before any move is made, the state
+is $(s_1,s_2)$, $P_1$ consists of the single vertex $s_1$ and $P_2$ of
+the single vertex $s_2$. They are disjoint because $s_1\neq s_2$. Suppose the claim holds in $(u,v)$ and
+the next move extends $P_1$ along an edge $(u,w)$. Since $D$ is acyclic,
+$\pi(w)>\pi(u)\ge\pi(x)$ for every $x\in V(P_1)$, so $P_1$ remains a
+path. It remains to show $w\notin V(P_2)$. The move requires $w\neq v$.
+Let $x$ be a vertex of $P_2$ other than $v$. Then $P_2$ has been
+extended at least once; consider its last extension, a move
+$(u',v')\to(u',v)$. The rule chose $P_2$ in state $(u',v')$, so either
+$u'=t_1$, or $v'\neq t_2$ and $\pi(v')<\pi(u')$. If $u'=t_1$, then $P_1$
+was never extended afterwards and $u=t_1$, which contradicts the fact
+that $P_1$ is extended now. Hence $\pi(v')<\pi(u')$. The vertex $x$ lies
+on $P_2$ no later than $v'$ and $u'$ lies on $P_1$ no later than $u$, so
+\[
+  \pi(x)\le\pi(v')<\pi(u')\le\pi(u)<\pi(w),
+\]
+and $x\neq w$. The case in which $P_2$ is extended is symmetric: the
+last extension of $P_1$ took place in a state $(u',v')$ with $u'\neq
+t_1$ and either $v'=t_2$ or $\pi(u')<\pi(v')$; the first option would
+mean $v=t_2$, but $P_2$ is being extended, so
+$\pi(x)\le\pi(u')<\pi(v')\le\pi(v)<\pi(w)$ for every $x\in V(P_1)$
+other than $u$.
+\end{proof}
+
+\begin{lemma}\label{lem:vdp-complete}
+If there are vertex-disjoint paths $Q_1\colon s_1\to t_1$ and
+$Q_2\colon s_2\to t_2$ in $D$, then $(t_1,t_2)$ is reachable from
+$(s_1,s_2)$ in $H$.
+\end{lemma}
+
+\begin{proof}
+We build a walk in $H$ that keeps $u$ on $Q_1$ and $v$ on $Q_2$. This
+holds in $(s_1,s_2)$. In a state $(u,v)\neq(t_1,t_2)$ the rule selects a
+path that has not reached its target, as observed above. Move its last
+vertex to the next vertex $w$ of $Q_1$ or $Q_2$ respectively. Since
+$Q_1$ and $Q_2$ are disjoint, $w$ differs from the last vertex of the
+other path, so this is a move of $H$, and the invariant still holds.
+Every move advances along $Q_1$ or $Q_2$, so after
+$|E(Q_1)|+|E(Q_2)|$ moves the walk is in $(t_1,t_2)$.
+\end{proof}
+
+The depth-first search visits every state reachable from $(s_1,s_2)$,
+so by Lemma~\ref{lem:vdp-complete} it finds $(t_1,t_2)$ whenever a
+solution exists. The stored edges describe one walk from $(s_1,s_2)$ to
+$(t_1,t_2)$, and by Lemma~\ref{lem:vdp-sound} the paths recovered from
+it are vertex-disjoint. Hence \texttt{two\_vdp\_in\_dag} returns a pair
+of paths if and only if one exists, and every returned pair is correct.
+
+\paragraph{Running time.} The topological order is computed with
+Kahn's algorithm in $O(|V|+|E|)$ time; if the input contains a cycle,
+the order is incomplete and the function throws instead of answering.
+Each state is expanded at most once. Expanding $(u,v)$ scans the
+out-edges of one of $u$ and $v$, so the total work of the search is at
+most
+\[
+  \sum_{u\in V}\sum_{v\in V}\bigl(\deg^{+}(u)+\deg^{+}(v)\bigr)
+  = 2|V||E|.
+\]
+Together with the $|V|^{2}$-entry array of stored edges this gives
+$O(|V|^{2}+|V||E|)$ time and $O(|V|^{2})$ memory per call.
 
 \section{Testing strategy}
 \label{sec:correctness}
 
 The project ships:
 \begin{itemize}
-  \item $68$ unit tests covering the graph data structure, both
-    Dijkstras, the shortest-path DAG, 2-VDP (including a test that
-    pins the capacity-$1$ vertex split), both reductions (including that
-    \textsc{NextSP-Straight} removes forward/sideways back-edges and
-    records the right candidates), the layered NSP algorithm on
-    hand-built examples, both baselines, and the end-to-end
-    \texttt{cwz\_nsp} pipeline. All pass.
+  \item $114$ unit tests covering the graph data structure, both
+    Dijkstras, the shortest-path DAG, 2-VDP ($52$ tests), both
+    reductions (including that \textsc{NextSP-Straight} removes
+    forward/sideways back-edges and records the right candidates), the
+    layered NSP algorithm on hand-built examples, both baselines, and
+    the end-to-end \texttt{cwz\_nsp} pipeline. All pass.
+  \item A brute-force 2-VDP solver
+    (\texttt{src/two\_vdp/brute\_force\_two\_vdp}) used as an oracle for
+    \texttt{two\_vdp\_in\_dag}. It enumerates all simple $s_1\to t_1$
+    and $s_2\to t_2$ paths by depth-first search, stores the vertex set
+    of each path as a $64$-bit mask, and reports a solution if and only
+    if some $s_1\to t_1$ mask and some $s_2\to t_2$ mask have an empty
+    intersection. It takes exponential time and is limited to $64$
+    vertices, but it shares no code with the Fortune--Hopcroft--Wyllie
+    implementation and does not rely on acyclicity. The unit tests
+    compare the two on every terminal quadruple $(s_1,t_1,s_2,t_2)$ of
+    all DAGs on $4$ labelled vertices ($393{,}216$ queries), of all
+    $1{,}024$ edge subsets of a $5$-vertex transitive tournament under a
+    random relabelling ($640{,}000$ queries), and of $400$ random DAGs
+    with up to $7$ vertices and occasional parallel edges ($266{,}533$
+    queries). Every pair of paths returned by \texttt{two\_vdp\_in\_dag}
+    is also checked to consist of two vertex-disjoint paths with the
+    right endpoints. The two solvers agree on all $1{,}299{,}749$
+    queries. Hand-built tests cover the degenerate cases $s_i=t_i$,
+    parallel edges, rejection of cyclic inputs, and instances in which
+    only the crossed pairing $s_1\to t_2$, $s_2\to t_1$ is routable.
   \item A property-based fuzz \texttt{fuzz\_brute\_vs\_yen} that
     confirms brute force and Yen's NSP heuristic agree on cost across
     thousands of random small graphs (mismatches would indicate a bug
@@ -153,17 +274,16 @@ The project ships:
     mismatches across $34{,}000$ random trials drawn from $35$ distinct
     RNG seeds: $|V|\le 10$ over $20$ seeds ($20{,}000$ trials),
     $|V|\le 12$ over $10$ seeds ($10{,}000$ trials), and $|V|\le 14$
-    over $5$ seeds ($4{,}000$ trials). Of these, $23{,}464$ instances
-    had an NSP and the remaining $10{,}536$ had none; both algorithms
+    over $5$ seeds ($4{,}000$ trials). Of these, $23{,}624$ instances
+    had an NSP and the remaining $10{,}376$ had none; both algorithms
     agreed on which case held every time. The seeds are consecutive
     integers ($1001$--$1020$, $2001$--$2010$, $3001$--$3005$), so the
     campaign is reproducible verbatim.
 \end{itemize}
 
 The combined test suite establishes correctness on small graphs;
-agreement with Yen on every benchmark instance
-(Section~\ref{sec:agreement}) extends the empirical guarantee through
-$|V|=50$.
+agreement with brute force on all $1200$ benchmark instances
+(Section~\ref{sec:agreement}) extends the evidence to larger graphs.
 
 \section{The CLI}
 

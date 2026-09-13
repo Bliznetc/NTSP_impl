@@ -11,10 +11,10 @@ with a fixed polynomial bound on general inputs.
 
 \begin{enumerate}
   \item The algorithm is implementable from the paper's pseudocode
-    without needing access to optimised 2-VDP subroutines: a
-    straightforward max-flow-based 2-VDP yields a working implementation
-    at the cost of a higher constant factor (the asymptotic
-    $O(|V|+|E|)$ bound is the same as Tholey's linear-time algorithm).
+    without Tholey's linear-time 2-VDP routine. The
+    Fortune--Hopcroft--Wyllie algorithm for two paths in a DAG, which
+    runs in $O(|V|^{2}+|V||E|)$ time, is enough for a working
+    implementation, at the cost of a factor of $|V|$ per 2-VDP call.
   \item On the four benign random graph families we measured
     (Erd\H{o}s--R\'enyi, random DAG, layered, grid) at $|V|\le 70$,
     Yen's $k$-shortest-simple-paths algorithm is several orders of
@@ -43,15 +43,14 @@ with a fixed polynomial bound on general inputs.
     ($|V|\le 14$) and matches Yen on every benign benchmark instance up
     to $|V|=70$. The $6$-tuple enumeration alone
     suffices on the strictly-layered graph -- the property the paper's
-    correctness proof relies on. The one remaining approximation is the
-    $K=5$ multi-edge cap in \textsc{NextSP} (below).
+    correctness proof relies on.
 \end{enumerate}
 
 \section{Limitations and future work}
 
-\paragraph{Engineering improvements.} Replacing the max-flow 2-VDP by
-Tholey's linear-time algorithm~\cite{Tholey2012} would lower the
-constant factor on the inner subroutine. Eliminating the
+\paragraph{Engineering improvements.} Replacing our quadratic 2-VDP by
+Tholey's linear-time algorithm~\cite{Tholey2012} would remove a factor
+of $|V|$ from every 2-VDP call. Eliminating the
 \textsc{NextSP-Straight} subdivision via clever distance indexing,
 suggested by the paper's authors as a clarity-oriented choice, could
 provide further speedup.
@@ -63,16 +62,6 @@ Erd\H{o}s--R\'enyi graphs, in every case well below the worst-case
 $|V|^{4}|E|^{3}$ bound; characterising this gap on still larger or
 differently-structured inputs would be valuable.
 
-\paragraph{Multi-edge cap tightening.} The $K=5$ multi-edge cap in
-\texttt{reduce\_to\_straight} is the one approximation in our pipeline.
-The faithful fix is to implement \textsc{NextSP}'s own
-candidate-recording step (mirroring what \textsc{NextSP-Straight}
-already does for back-edges in our code): record the candidate path
-through each folded vertex, then keep only the single minimum-weight
-shortcut per pair. This would eliminate both the cap and the Cartesian
-multi-edge blow-up that motivated it, making the entire pipeline a
-proven transcription of the paper.
-
 \paragraph{Adversarial benchmarks.} The diamond-chain family is the
 simplest construction we know of that defeats Yen. Richer adversarial
 graphs -- recursive nestings, irregular branching factors, weight
@@ -82,5 +71,5 @@ ratios that vary with depth -- would map out the boundary between
 \paragraph{Algorithmic refinements.} The paper's authors note their
 bound is ``not optimised''. Candidate optimisations include exploiting
 layer structure to prune the $6$-tuple enumeration and amortising 2-VDP
-queries across nearby tuples, as well as replacing our max-flow 2-VDP
+queries across nearby tuples, as well as replacing our quadratic 2-VDP
 with Tholey's linear-time routine.
