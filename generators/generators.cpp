@@ -41,8 +41,7 @@ Graph random_dag(VertexId n, double p, Weight max_weight, std::mt19937& rng) {
 Graph layered(int layers, int width, double p_forward, double p_back,
               Weight max_weight, std::mt19937& rng) {
     if (layers < 2 || width < 1) throw std::invalid_argument("layered: bad dimensions");
-    // s = 0, layer 0 vertices = [1, 1+width), ..., layer L-1 vertices = ..., t = last.
-    // We use `layers` interior layers plus s and t as endpoints.
+    // s = 0, layer i = [1 + i*width, 1 + (i+1)*width), t = n - 1.
     const VertexId n = 2 + layers * width;
     Graph g(n);
     auto layer_start = [&](int i) -> VertexId { return 1 + i * width; };
@@ -57,19 +56,8 @@ Graph layered(int layers, int width, double p_forward, double p_back,
     for (int j = 0; j < width; ++j) {
         g.add_edge(0, layer_start(0) + j, rand_weight(rng, max_weight));
     }
-    // layer i -> layer i+1. Every layer is guaranteed to contain at least one
-    // vertex REACHABLE FROM s, which makes t reachable from s (the last layer
-    // always connects to t).
-    //
-    // Sampling width^2 pairs independently at p_forward leaves a transition
-    // empty with probability (1-p_forward)^(width^2) -- 13% at width=2,
-    // p_forward=0.4 -- which severs the graph. Guaranteeing merely one edge per
-    // transition is NOT enough: if that edge starts at a vertex that is itself
-    // unreachable, the graph is still severed, and at width=2 reachability then
-    // decays like 2^-(layers-2) (measured 48% severed at layers=5, width=2,
-    // p_forward=0.4). So we track reachability as we build and, when a
-    // transition would leave the next layer unreachable, add a repair edge out
-    // of a vertex that is known to be reachable.
+    // layer i -> layer i+1. If no vertex of layer i+1 is reachable from s, add
+    // a repair edge from a reachable vertex, so t is always reachable.
     std::uniform_int_distribution<int> pick(0, width - 1);
     std::vector<char> reachable(width, 1);  // s connects to all of layer 0
     for (int i = 0; i + 1 < layers; ++i) {
@@ -88,8 +76,7 @@ Graph layered(int layers, int width, double p_forward, double p_back,
         if (!any_reachable) {
             std::vector<int> sources;
             for (int u = 0; u < width; ++u) if (reachable[u]) sources.push_back(u);
-            // `reachable` is non-empty by induction: layer 0 is fully reachable
-            // and every iteration below restores at least one reachable vertex.
+            // Non-empty by induction.
             int u = sources[std::uniform_int_distribution<int>(
                 0, (int)sources.size() - 1)(rng)];
             int v = pick(rng);
@@ -149,7 +136,7 @@ Graph diamond_chain(int k, Weight w, Weight nsp_extra) {
         g.add_edge(bot(i), merge(i), w);
         prev = merge(i);
     }
-    // NSP shortcut: direct s -> t edge whose weight exceeds the shortest.
+    // s -> t shortcut: the unique NSP.
     g.add_edge(0, n - 1, 2 * k * w + nsp_extra);
     return g;
 }
@@ -157,7 +144,7 @@ Graph diamond_chain(int k, Weight w, Weight nsp_extra) {
 Graph scale_free(VertexId n, int m, Weight max_weight, std::mt19937& rng) {
     if (m < 1 || n < m + 1) throw std::invalid_argument("scale_free: bad parameters");
     Graph g(n);
-    // Initial clique of m+1 vertices to seed degree distribution.
+    // Seed clique on m+1 vertices.
     for (VertexId u = 0; u <= m; ++u) {
         for (VertexId v = 0; v <= m; ++v) {
             if (u != v) g.add_edge(u, v, rand_weight(rng, max_weight));

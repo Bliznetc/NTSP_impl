@@ -22,9 +22,7 @@ struct Edge {
     Weight w;
 };
 
-// Directed graph with positive edge weights. Vertex IDs are dense [0, n).
-// Edges have stable IDs assigned at insertion time. Both out- and in-adjacency
-// lists are maintained so that reverse Dijkstra is O(m log n) without rebuilding.
+// Directed graph, positive weights, dense vertex ids, stable edge ids.
 class Graph {
    public:
     Graph() = default;
@@ -40,8 +38,7 @@ class Graph {
     const std::vector<EdgeId>& out_edges(VertexId v) const { return out_[v]; }
     const std::vector<EdgeId>& in_edges(VertexId v) const { return in_[v]; }
 
-    // DIMACS-style I/O. First line: "n m". Following m lines: "u v w".
-    // Vertices are 0-indexed.
+    // Text format: "n m", then m lines "u v w" (0-indexed).
     static Graph from_text(const std::string& text);
     std::string to_text() const;
 

@@ -1,6 +1,4 @@
-// Differential fuzz: CWZ NSP vs brute-force NSP on random small graphs.
-// Both must agree on NSP cost. CWZ may return a different but equal-cost path.
-//
+// Differential fuzz: CWZ vs brute force NSP costs on random graphs.
 // Usage: ./build/fuzz_cwz_vs_brute [num_trials] [max_n] [seed]
 
 #include <chrono>
@@ -54,9 +52,7 @@ cwz::Graph make(int kind, int n, std::mt19937& rng) {
 int main(int argc, char** argv) {
     int num_trials = argc > 1 ? std::atoi(argv[1]) : 1000;
     int max_n = argc > 2 ? std::atoi(argv[2]) : 8;
-    // base 0: accept decimal and 0x-prefixed hex. With base 10 a documented
-    // seed like 0xDEADBEEF silently parsed as 0, so "N different seeds" runs
-    // all replayed the same instances.
+    // base 0 accepts hex seeds
     std::uint64_t seed = argc > 3 ? std::strtoull(argv[3], nullptr, 0) : 0xDEADBEEFULL;
     std::mt19937 rng(static_cast<unsigned>(seed));
 

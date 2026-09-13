@@ -1,14 +1,6 @@
-// Differential fuzz: CWZ NSP vs Yen-NSP on random graphs, at sizes where
-// brute force is too slow to act as the oracle. We trust Yen (independently
-// fuzzed against brute force at smaller sizes via fuzz_brute_vs_yen) and use
-// it as the reference here.
-//
+// Differential fuzz: CWZ vs Yen NSP costs at sizes too large for brute force.
 // Usage: ./build/fuzz_cwz_vs_yen [num_trials] [max_n] [seed]
-//
-// Note: at large n, individual instances can still be slow if there are many
-// shortest paths (Yen) or many back-edges (CWZ). The per-trial time budget is
-// 60 seconds; trials that exceed it on either algorithm are skipped with a
-// note rather than counted as a mismatch.
+// Trials over the time budget are skipped.
 
 #include <chrono>
 #include <cstdio>

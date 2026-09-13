@@ -8,8 +8,7 @@
 
 using namespace cwz;
 
-// Validate a returned NSP path: starts at s, ends at t, edges chain, no vertex
-// revisited, and sum of edge weights equals the reported NSP cost.
+// Path is simple, s->t, and its weight equals the reported cost.
 ::testing::AssertionResult check_nsp_path(
     const Graph& g, VertexId s, VertexId t,
     Weight reported_cost, const std::vector<EdgeId>& path) {
@@ -91,13 +90,7 @@ TEST(BruteForceNsp, EnforcesVertexCap) {
 }
 
 TEST(BruteForceNsp, MediumHandBuiltGraph) {
-    // 10 vertices, two parallel forward paths of cost 5 plus a (2,8) shortcut
-    // and a direct (0,9) edge of weight 11. Simple s->t paths:
-    //   0->1->2->3->4->9      cost 5   (shortest)
-    //   0->5->6->7->8->9      cost 5   (alternate shortest)
-    //   0->1->2->8->9         cost 6   (NSP via the (2,8,3) shortcut)
-    //   0->9                  cost 11  (direct back-edge)
-    // NSP cost = 6.
+    // Two cost-5 paths, NSP 0->1->2->8->9 (cost 6), direct 0->9 (cost 11).
     Graph g(10);
     g.add_edge(0, 1, 1);  g.add_edge(1, 2, 1);
     g.add_edge(2, 3, 1);  g.add_edge(3, 4, 1);
@@ -115,10 +108,7 @@ TEST(BruteForceNsp, MediumHandBuiltGraph) {
 }
 
 TEST(BruteForceNsp, DiamondChainK5) {
-    // 16 vertices, 21 edges, exactly 2^5 = 32 shortest s->t paths each of
-    // weight 10, plus the unique NSP shortcut s->t of weight 11. Stresses the
-    // DFS with branch-and-bound pruning: many short paths to ignore before the
-    // single NSP candidate.
+    // 32 shortest paths of cost 10; the NSP is the direct edge (cost 11).
     Graph g = gen::diamond_chain(/*k=*/5, /*w=*/1, /*nsp_extra=*/1);
     VertexId t = g.num_vertices() - 1;
     auto r = brute_force_nsp(g, 0, t);
@@ -130,10 +120,7 @@ TEST(BruteForceNsp, DiamondChainK5) {
 }
 
 TEST(BruteForceNsp, GeneratedLayeredGraphsHaveValidNspWhenItExists) {
-    // Stress test across 20 seeded layered graphs near the cap. Doesn't pin
-    // down a specific cost (it depends on the seed) but verifies the
-    // structural invariants of whatever NSP brute force returns: simple s->t
-    // path, weight matches the reported cost, strictly greater than shortest.
+    // Any returned NSP on random layered graphs is a valid, longer path.
     std::mt19937 rng(0x1234);
     int with_nsp = 0;
     for (int trial = 0; trial < 20; ++trial) {
@@ -147,8 +134,6 @@ TEST(BruteForceNsp, GeneratedLayeredGraphsHaveValidNspWhenItExists) {
         EXPECT_GT(r.cost, r.shortest_cost) << "NSP must be strictly longer";
         EXPECT_TRUE(check_nsp_path(g, 0, t, r.cost, r.edges));
     }
-    // Sanity: at least some of the 20 trials should yield an NSP. Otherwise
-    // the generator parameters are too sparse and this test isn't exercising
-    // the NSP path.
+    // The generator must produce some NSPs.
     EXPECT_GT(with_nsp, 0);
 }

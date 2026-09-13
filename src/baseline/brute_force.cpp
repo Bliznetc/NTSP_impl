@@ -8,13 +8,8 @@ namespace cwz {
 
 namespace {
 
-// Self-contained Dijkstra. This file is the correctness oracle for the CWZ
-// implementation, so it deliberately does *not* reuse src/shortest_path/: an
-// oracle that shares code with the code under test cannot catch bugs in that
-// shared code. `reverse` walks in-edges, giving shortest u->t distances.
-//
-// Correctness note: edge weights are strictly positive, so the shortest walk
-// and the shortest simple path coincide and Dijkstra is exact here.
+// Own Dijkstra, independent of src/shortest_path/ so the oracle shares no
+// code with the code under test. `reverse` gives distances to src.
 std::vector<Weight> dijkstra_local(const Graph& g, VertexId src, bool reverse) {
     const VertexId n = g.num_vertices();
     std::vector<Weight> dist(n, kInfWeight);
@@ -60,22 +55,13 @@ struct DfsState {
 
 void dfs(DfsState& st, VertexId u, Weight cost) {
     if (u == st.t) {
-        // Strictly greater than the shortest path cost, strictly less than best.
         if (cost > st.shortest && cost < st.best) {
             st.best = cost;
             st.best_path = st.path_edges;
         }
         return;
     }
-    // Admissible lower-bound (A*) pruning. Any completion of this prefix costs
-    // at least (*st.to_t)[u], so if that already fails to beat `best` the whole
-    // subtree can be skipped. This never prunes an optimal NSP: along its
-    // prefix, cost + to_t[u] <= (its total) < best whenever best has not yet
-    // reached that total.
-    //
-    // Without this the only bound was `cost >= best` with `best` starting at
-    // infinity, which on dense instances explored billions of nodes -- the
-    // reason this oracle used to be limited to |V| ~ 13.
+    // A* pruning: to_t[u] is an admissible bound on the remaining cost.
     const Weight h = (*st.to_t)[u];
     if (h >= kInfWeight) return;         // t not reachable from u
     if (cost + h >= st.best) return;     // cannot improve on best
@@ -97,10 +83,6 @@ NspResult brute_force_nsp(const Graph& g, VertexId s, VertexId t, VertexId verte
         throw std::length_error(
             "brute_force_nsp: graph exceeds vertex_cap (raise it explicitly to override)");
     }
-    // Range-check the terminals. Without this an out-of-range s or t indexes
-    // past the end of the distance vector -- an out-of-bounds write in the
-    // Dijkstra seed, not merely a bad answer -- and nsp-cli forwards --s/--t
-    // unvalidated.
     if (s < 0 || s >= g.num_vertices() || t < 0 || t >= g.num_vertices()) {
         throw std::out_of_range("brute_force_nsp: s or t out of range");
     }

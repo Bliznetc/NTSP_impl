@@ -82,9 +82,7 @@ TEST(CwzNsp, MatchesBruteForceOnSmallExample) {
 }
 
 TEST(CwzNsp, MultiVertexOffSpChainIsFound) {
-    // The case that motivated switching to the paper-faithful pipeline.
-    // The NSP goes through a chain of three off-SP vertices; only the
-    // iterative reduce_to_straight can preserve it.
+    // NSP runs through a chain of three off-SP vertices.
     Graph g(5);
     g.add_edge(0, 1, 2);
     g.add_edge(1, 2, 2);
@@ -102,8 +100,7 @@ TEST(CwzNsp, MultiVertexOffSpChainIsFound) {
 }
 
 TEST(CwzNsp, NspPathReconstructsValidlyInOriginalGraph) {
-    // Verify that the path expansion correctly translates back through both
-    // reductions to a valid simple path in the original graph.
+    // The path must map back through both reductions.
     Graph g(10);
     g.add_edge(0, 1, 1);  g.add_edge(1, 2, 1);
     g.add_edge(2, 3, 1);  g.add_edge(3, 4, 1);
@@ -122,8 +119,7 @@ TEST(CwzNsp, NspPathReconstructsValidlyInOriginalGraph) {
 }
 
 TEST(CwzNsp, MatchesBruteForceOnGeneratedGraphs) {
-    // Strong correctness check: cross-validate CWZ against brute force on
-    // 40 seeded random graphs from every generator family.
+    // CWZ vs brute force on random graphs.
     std::mt19937 rng(0xC0DE);
     int verified_nsp = 0;
     int compared = 0;

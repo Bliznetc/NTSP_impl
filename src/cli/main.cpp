@@ -1,8 +1,4 @@
-// nsp-cli: read a graph from stdin or a file, run one of {cwz, brute, yen},
-// print the NSP cost and path. Graph format: first line "n m", then m lines
-// "u v w".
-//
-// Usage:
+// nsp-cli: print the NSP of a graph ("n m", then m lines "u v w").
 //   nsp-cli --algo cwz --input graph.txt
 //   echo "4 4 0 1 1 1 3 1 0 2 2 2 3 1" | nsp-cli --algo brute
 

@@ -1,5 +1,4 @@
-// Reproduce trial 58 of profile_cwz with seed 4 and dump the reduced graph
-// sizes so we can see where the explosion is.
+// Replay profile_cwz trial 58 (seed 4) and print the reduced graph sizes.
 
 #include <chrono>
 #include <cstdio>
@@ -14,7 +13,6 @@ using clk = std::chrono::steady_clock;
 double sec(clk::time_point t0) { return std::chrono::duration<double>(clk::now() - t0).count(); }
 
 int main() {
-    // Replay the same RNG sequence to reach trial 58.
     std::mt19937 rng(4ULL);
     cwz::Graph g(0);
     int target_trial = 58;

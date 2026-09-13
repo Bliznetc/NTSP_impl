@@ -56,8 +56,7 @@ TEST(SpDag, MultipleShortestPathsAllIncluded) {
 }
 
 TEST(SpDag, VertexOffShortestPathExcluded) {
-    // 0 -> 1 -> 2 (shortest, length 2), and a detour 0 -> 3 -> 2 with weight 5
-    // means 3 is not on any shortest path.
+    // 0->1->2 is shortest; detour 0->3->2 (cost 5) is off SP.
     Graph g(4);
     g.add_edge(0, 1, 1);
     g.add_edge(1, 2, 1);
@@ -73,24 +72,8 @@ TEST(SpDag, VertexOffShortestPathExcluded) {
 }
 
 TEST(SpDag, LargerGraphWithMixedOnAndOffSpStructure) {
-    // 8-vertex graph. Four distinct shortest 0->7 paths each of weight 4,
-    // plus an off-SP detour through vertex 6 of weight 20.
-    //
-    //   0 ---1--> 1 ---1--> 3 ---1--> 4 ---1--> 7
-    //    \         \         \         /
-    //   1 \         \         \-->5--/-1
-    //      \         \                ^
-    //       v         v               |
-    //       2 ---1--> 3 (merge)       |
-    //
-    //   0 --10--> 6 --10--> 7      (off-SP detour)
-    //
-    // Distances from 0:
-    //   dS = [0, 1, 1, 2, 3, 3, 10, 4]
-    // Distances to 7:
-    //   dT = [4, 3, 3, 2, 1, 1, 10, 0]
-    // dG(0,7) = 4. Vertex 6 is off SP (dS+dT = 20).
-    // 8 edges are on SP; 2 (0->6, 6->7) are not.
+    // Four shortest 0->7 paths of cost 4 via {1,2} -> 3 -> {4,5}, plus an
+    // off-SP detour 0->6->7 of cost 20.
     Graph g(8);
     EdgeId e01 = g.add_edge(0, 1, 1);
     EdgeId e02 = g.add_edge(0, 2, 1);
@@ -110,8 +93,7 @@ TEST(SpDag, LargerGraphWithMixedOnAndOffSpStructure) {
     for (int v : {0, 1, 2, 3, 4, 5, 7}) EXPECT_TRUE(dag.vertex_on_sp[v]) << "v=" << v;
     EXPECT_FALSE(dag.vertex_on_sp[6]);
 
-    // SP-DAG edges: the 8 unit-weight edges through the diamond, but not
-    // the two off-SP detour edges.
+    // Only the 8 unit edges.
     std::set<EdgeId> sp(dag.edges_on_sp.begin(), dag.edges_on_sp.end());
     EXPECT_EQ(sp.size(), 8u);
     for (EdgeId e : {e01, e02, e13, e23, e34, e35, e47, e57})
@@ -121,13 +103,7 @@ TEST(SpDag, LargerGraphWithMixedOnAndOffSpStructure) {
 }
 
 TEST(SpDag, ConsistentWithIndependentDijkstrasOnGeneratedGraphs) {
-    // Property check: build_sp_dag's claim must match what an independent
-    // (dS, dT) computation derives. Specifically, for every random graph:
-    //   * st_distance == dS[t]
-    //   * vertex_on_sp[v] iff dS[v] + dT[v] == st_distance
-    //   * edges_on_sp = { e : dS[e.src] + e.w + dT[e.dst] == st_distance }
-    // If the implementation ever drifts between its vertex pass and its
-    // edge pass (e.g., re-uses a stale local), this catches it.
+    // Must match independently computed dS/dT on random graphs.
     std::mt19937 rng(0x5DEDA6);
     int verified = 0;
     for (int trial = 0; trial < 30; ++trial) {
@@ -151,7 +127,7 @@ TEST(SpDag, ConsistentWithIndependentDijkstrasOnGeneratedGraphs) {
         auto dT = dijkstra_reverse(g, t);
         ASSERT_EQ(dag.st_distance, dS.dist[t]);
 
-        // Vertex membership: dag.vertex_on_sp matches the independent formula.
+        // Vertex membership.
         for (VertexId v = 0; v < g.num_vertices(); ++v) {
             bool expected = dS.dist[v] < kInfWeight && dT.dist[v] < kInfWeight &&
                             dS.dist[v] + dT.dist[v] == dag.st_distance;
@@ -159,7 +135,7 @@ TEST(SpDag, ConsistentWithIndependentDijkstrasOnGeneratedGraphs) {
                 << "trial " << trial << " v=" << v;
         }
 
-        // Edge membership: dag.edges_on_sp is exactly the right set.
+        // Edge membership.
         std::set<EdgeId> dag_edges(dag.edges_on_sp.begin(), dag.edges_on_sp.end());
         for (EdgeId i = 0; i < g.num_edges(); ++i) {
             const Edge& e = g.edge(i);
@@ -169,7 +145,7 @@ TEST(SpDag, ConsistentWithIndependentDijkstrasOnGeneratedGraphs) {
             EXPECT_EQ(in_dag, expected) << "trial " << trial << " edge " << i;
         }
 
-        // Cross-consistency: every edge in the DAG should have on-SP endpoints.
+        // DAG edges have on-SP endpoints.
         for (EdgeId i : dag.edges_on_sp) {
             const Edge& e = g.edge(i);
             EXPECT_TRUE(dag.vertex_on_sp[e.src]) << "trial " << trial << " edge " << i;

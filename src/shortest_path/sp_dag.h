@@ -7,16 +7,9 @@
 
 namespace cwz {
 
-// Identification of the shortest-path DAG of (G, s, t): the subgraph induced
-// by edges that lie on some shortest s -> t path. By definition, an edge
-// (u, v) of weight w is on some shortest s -> t path iff
-//     dS[u] + w + dT[v] == dS[t]
-// where dS = dist from s, dT = dist to t. A vertex v lies on some shortest
-// s -> t path iff dS[v] + dT[v] == dS[t].
-//
-// Returned `edges_on_sp` lists edge IDs of the original graph in arbitrary order.
-// `vertex_on_sp[v]` is true iff v lies on some shortest s -> t path. If t is
-// not reachable from s, both are empty / all-false respectively.
+// Edges and vertices on some shortest s->t path:
+//   edge (u,v,w): dS[u] + w + dT[v] == dS[t];  vertex v: dS[v] + dT[v] == dS[t].
+// Empty if t is unreachable.
 struct ShortestPathDag {
     std::vector<EdgeId> edges_on_sp;
     std::vector<char> vertex_on_sp;

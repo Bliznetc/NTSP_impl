@@ -1,9 +1,5 @@
-// Differential fuzz: brute force vs Yen-NSP should agree on NSP cost across
-// random small graphs. They may return different *paths* of equal cost.
-//
-// This binary is not part of the CTest suite by default; run manually:
-//   ./build/fuzz_brute_vs_yen [num_trials] [max_n] [seed]
-// Exits nonzero on mismatch.
+// Differential fuzz: brute force vs Yen NSP costs on random graphs.
+// Usage: ./build/fuzz_brute_vs_yen [num_trials] [max_n] [seed]
 
 #include <cstdint>
 #include <cstdio>
@@ -57,7 +53,7 @@ cwz::Graph make(int kind, int n, std::mt19937& rng) {
 int main(int argc, char** argv) {
     int num_trials = argc > 1 ? std::atoi(argv[1]) : 2000;
     int max_n = argc > 2 ? std::atoi(argv[2]) : 10;
-    // base 0: accept decimal and 0x-prefixed hex (base 10 parsed "0x..." as 0).
+    // base 0 accepts hex seeds
     std::uint64_t seed = argc > 3 ? std::strtoull(argv[3], nullptr, 0) : 0xC0FFEEULL;
     std::mt19937 rng(static_cast<unsigned>(seed));
 
@@ -90,7 +86,7 @@ int main(int argc, char** argv) {
             continue;
         }
         if (bf.cost != yn.cost) {
-            // Yen could hit k_max and false-negative; treat as soft.
+            // Yen hit k_max: not counted as a mismatch.
             if (yn.cost == cwz::kInfWeight) {
                 yen_caps++;
                 std::fprintf(stderr,

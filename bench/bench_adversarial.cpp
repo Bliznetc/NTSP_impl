@@ -1,14 +1,5 @@
-// Adversarial benchmark: diamond_chain graphs that have 2^k distinct simple
-// shortest paths. Yen-NSP must enumerate all of them before finding the
-// (unique) NSP. CWZ's runtime, by contrast, depends only on graph size.
-//
-// Measurement note: the two algorithms are timed in SEPARATE passes. An earlier
-// version interleaved them (yen at k, then cwz at k), which inflated the CWZ
-// timings at k=13..15 by 15-50x: each CWZ run started in the allocator/page
-// state left behind by a Yen run that had just churned 2^k paths. Running all
-// CWZ measurements first, on a cold-but-uncontaminated heap, and repeating each
-// measurement, gives the true microsecond-scale figures.
-//
+// Adversarial benchmark: diamond chains with 2^k shortest paths.
+// CWZ and Yen run in separate passes so Yen's heap churn doesn't skew CWZ.
 // Writes a CSV (one row per algo and k) to argv[1] or stdout.
 
 #include <algorithm>
@@ -62,13 +53,13 @@ int main(int argc, char** argv) {
 
     std::vector<Row> cwz_rows(k_max + 1), yen_rows(k_max + 1);
 
-    // ---- Pass 1: CWZ only. No Yen run has touched the heap in this pass. ----
+    // ---- Pass 1: CWZ, median of cwz_reps runs. ----
     for (int k = k_min; k <= k_max; ++k) {
         cwz::Graph g = cwz::gen::diamond_chain(k, /*w=*/1, /*nsp_extra=*/1);
         cwz::VertexId s = 0;
         cwz::VertexId t = g.num_vertices() - 1;
 
-        // Warm-up (not timed): pages in the allocator arenas this size needs.
+        // Untimed warm-up.
         auto warm = cwz::cwz_nsp(g, s, t);
 
         std::vector<double> samples;

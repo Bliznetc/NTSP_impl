@@ -82,12 +82,8 @@ MaskedDij dijkstra_masked(const Graph& g, VertexId src,
     return r;
 }
 
-// Try a candidate (q1_edges, q2_edges) which together with optional residual
-// Dijkstra A->B gives an NSP candidate. Updates (best_cost, best_edges) in place.
-//
-// `q1_edges` is the s->A path (edge IDs in original graph), possibly empty if A=s.
-// `q2_edges` is the B->t path, possibly empty if B=t.
-// Q1 and Q2 must already be vertex-disjoint.
+// Complete disjoint Q1 (s->A) and Q2 (B->t) with a shortest A->B path
+// avoiding them; keep it if it is the best NSP so far.
 void try_candidate(const Graph& g, VertexId s, VertexId t,
                    const DijkstraResult& dS, Weight st_dist,
                    VertexId A, VertexId B,
@@ -96,22 +92,19 @@ void try_candidate(const Graph& g, VertexId s, VertexId t,
                    Weight& best_cost, std::vector<EdgeId>& best_edges) {
     const VertexId n = g.num_vertices();
     std::vector<char> allowed(n, 1);
-    // Block Q1 interior vertices.
+    // Block Q1 and Q2 vertices; A and B stay allowed.
     if (!q1_edges.empty()) {
         allowed[s] = 0;
         for (EdgeId eid : q1_edges) allowed[g.edge(eid).dst] = 0;
     } else if (A == s) {
-        // Nothing to block from Q1 side except s, which equals A; we want A allowed.
+        // A == s: nothing to block.
     }
-    // Block Q2 interior vertices.
     if (!q2_edges.empty()) {
         allowed[t] = 0;
-        // Block all sources of Q2 edges except possibly B itself.
         for (EdgeId eid : q2_edges) {
             allowed[g.edge(eid).src] = 0;
         }
     }
-    // A and B must remain allowed for the A->B residual search.
     allowed[A] = 1;
     allowed[B] = 1;
 
@@ -146,7 +139,7 @@ NspResult cwz_nsp_layered(const Graph& g, VertexId s, VertexId t) {
 
     auto fwd = build_forward(g, dS);
 
-    // V_B endpoints.
+    // Endpoints of back-edges.
     std::vector<char> is_back_src(n, 0);
     std::vector<char> is_back_dst(n, 0);
     bool any_back = false;
@@ -165,14 +158,9 @@ NspResult cwz_nsp_layered(const Graph& g, VertexId s, VertexId t) {
     Weight best_cost = kInfWeight;
     std::vector<EdgeId> best_edges;
 
-    // The 6-tuple enumeration of Lemma 5.3. For each "barrier" between two
-    // consecutive layers L and L+1, enumerate the forward edges (X',X) and
-    // (Y',Y) that cross it (with X' at layer L, X at layer L+1, likewise Y).
-    // Then for each (A, B) with A in layer >= L+1 and B in layer <= L (so
-    // d(A) > d(B)), both incident to back-edges, find the pair of disjoint
-    // forward paths P1 = s->X'->X->A and P2 = B->Y'->Y->t via two 2-VDP-in-DAG
-    // queries (lower half s->X', B->Y'; upper half X->A, Y->t), and complete it
-    // with a shortest A->B path in the residual graph.
+    // Lemma 5.3: for each barrier between layers L and L+1, pick crossing edges
+    // (X',X), (Y',Y) and back-edge endpoints A (layer > L), B (layer <= L). Two
+    // 2-VDP queries give disjoint P1 = s->X'->X->A and P2 = B->Y'->Y->t.
     std::vector<Weight> distinct_d;
     distinct_d.reserve(n);
     for (VertexId v = 0; v < n; ++v) {
@@ -184,7 +172,7 @@ NspResult cwz_nsp_layered(const Graph& g, VertexId s, VertexId t) {
         return static_cast<int>(std::lower_bound(distinct_d.begin(), distinct_d.end(), d) -
                                 distinct_d.begin());
     };
-    // Group cross-edges by barrier layer L (layer of edge.src).
+    // Forward edges crossing each barrier.
     std::vector<std::vector<EdgeId>> cross_at(distinct_d.size());
     for (EdgeId fi = 0; fi < fwd.fg.num_edges(); ++fi) {
         const Edge& e = fwd.fg.edge(fi);
@@ -193,7 +181,6 @@ NspResult cwz_nsp_layered(const Graph& g, VertexId s, VertexId t) {
         if (Lv == Lu + 1) cross_at[Lu].push_back(fi);
     }
 
-    // For each barrier L, enumerate pairs (X′,X), (Y′,Y).
     for (int L = 0; L + 1 < static_cast<int>(distinct_d.size()); ++L) {
         const auto& crosses = cross_at[L];
         if (crosses.size() < 2) continue;
@@ -208,13 +195,7 @@ NspResult cwz_nsp_layered(const Graph& g, VertexId s, VertexId t) {
                 if (Xprime == Yprime || X == Y) continue;
                 EdgeId eY_orig = fwd.map_to_original[crosses[j]];
 
-                // Enumerate A (end of P1) with layer >= L+1, and B (start of
-                // P2) with layer <= L. The boundary cases A==X (P1's upper part
-                // trivial) and B==Y' (P2's lower part trivial) are permitted and
-                // important; the 2-VDP calls handle them and reject any tuple
-                // whose paths cannot be made disjoint. d(A)>d(B) is implied by
-                // LA >= L+1 > L >= LB, so no separate check is needed. This is a
-                // direct transcription of NextSP-Layered (paper Section 5).
+                // A == X and B == Y' (trivial halves) are allowed.
                 for (VertexId A = 0; A < n; ++A) {
                     if (!is_back_src[A]) continue;
                     if (A == s || A == t) continue;
@@ -258,16 +239,8 @@ NspResult cwz_nsp_layered(const Graph& g, VertexId s, VertexId t) {
 }
 
 NspResult cwz_nsp(const Graph& g, VertexId s, VertexId t) {
-    // Faithful Chen-Wein-Zhang pipeline (Theorem 4.1 + Theorem 5.4):
-    //   1. reduce_to_straight  -- fold off-shortest-path vertices.
-    //   2. reduce_to_layered   -- NextSP-Straight: subdivide layer-skipping
-    //      forward edges, and REMOVE every forward-or-sideways back-edge while
-    //      recording its candidate path Ps->u o (u,v) o Pv->t. The result is a
-    //      strictly (s,t)-layered graph plus a set of candidate NSPs.
-    //   3. NextSP-Layered (cwz_nsp_layered, Phase C) -- the Lemma 5.3 6-tuple
-    //      enumeration on the strictly layered graph.
-    //   4. The answer is the cheapest among the reduction candidates and the
-    //      layered result, mapped back to original-graph edges.
+    // Straight + layered reductions, then NextSP-Layered; the answer is the
+    // cheapest of its result and the reduction candidates.
     NspResult r;
     if (s == t || g.num_vertices() == 0) return r;
 
@@ -283,7 +256,7 @@ NspResult cwz_nsp(const Graph& g, VertexId s, VertexId t) {
     Weight best_cost = kInfWeight;
     std::vector<EdgeId> best_edges;
 
-    // Candidate from NextSP-Layered (in g_prime edges -> expand to original).
+    // Layered result, expanded to original edges.
     if (layered.cost < kInfWeight) {
         best_cost = layered.cost;
         best_edges.clear();
@@ -293,7 +266,7 @@ NspResult cwz_nsp(const Graph& g, VertexId s, VertexId t) {
         }
     }
 
-    // Candidates recorded during the reduction (already in original edges).
+    // Reduction candidates.
     for (const auto& cand : reduced.candidates) {
         if (cand.cost > r.shortest_cost && cand.cost < best_cost) {
             best_cost = cand.cost;

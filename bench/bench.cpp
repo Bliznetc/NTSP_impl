@@ -1,14 +1,6 @@
-// Benchmark harness for NSP algorithms.
-//
-// Runs CWZ, Yen-NSP, and (optionally) brute-force on graphs from each generator
-// family across a range of sizes. Times each call (wall clock) and writes one
-// CSV row per (algorithm, family, n, trial) to stdout. Run with:
-//   ./build/bench [out.csv]
-//
-// We deliberately keep the parameter ranges small enough to finish on a laptop
-// in a few minutes. All three algorithms now run across the whole sweep: the
-// brute-force oracle prunes with an admissible lower bound, so it is no longer
-// limited to tiny n. Instances where t is unreachable from s are redrawn.
+// Benchmark: brute force, Yen and CWZ on every generator family and size.
+// One CSV row per (algo, family, n, trial). Usage: ./build/bench [out.csv]
+// Instances with t unreachable from s are redrawn.
 
 #include <chrono>
 #include <cmath>
@@ -40,13 +32,7 @@ cwz::Graph mk_dag(int n, std::mt19937& rng) {
     return cwz::gen::random_dag(n, 0.30, 10, rng);
 }
 cwz::Graph mk_layered(int n, std::mt19937& rng) {
-    // Keep the layer grid roughly square and let BOTH dimensions grow with n.
-    // Deriving layers from n and then width from (n-2)/layers compounds two
-    // integer divisions, which made width oscillate (4,3,3,3,4,3,4) across the
-    // sweep. That flips the graph between deep-and-narrow and shallow-and-wide
-    // and changes the back-edge density discontinuously -- at target n=40 it
-    // produced only 32 vertices and a graph with so few back-edges that all
-    // three algorithms returned faster than at n=30.
+    // Square-ish layer grid, both dimensions growing with n.
     int width = std::max(2, (int)std::lround(std::sqrt((double)n)));
     int layers = std::max(2, (int)std::lround((double)(n - 2) / width));
     return cwz::gen::layered(layers, width, 0.40, 0.10, 10, rng);
@@ -57,10 +43,7 @@ cwz::Graph mk_grid(int n, std::mt19937& rng) {
     return cwz::gen::grid(side, side, 10, rng);
 }
 cwz::Graph mk_diamond_chain(int n, std::mt19937& /*rng*/) {
-    // Diamond chain has 1 + 3*k vertices, so k = max(1, (n-1)/3) gives a
-    // graph with approximately n vertices. This family has 2^k distinct
-    // shortest s->t paths, making it the worst case for Yen-NSP and the
-    // best case for CWZ (Phase 0 catches the unique back-edge in O(V+E)).
+    // k = (n-1)/3 gives ~n vertices and 2^k shortest paths (Yen's worst case).
     int k = std::max(1, (n - 1) / 3);
     return cwz::gen::diamond_chain(k, /*w=*/1, /*nsp_extra=*/1);
 }
@@ -69,10 +52,7 @@ double seconds_since(clk::time_point t0) {
     return std::chrono::duration<double>(clk::now() - t0).count();
 }
 
-// `n` is the requested sweep size; `n_actual` is the vertex count the generator
-// really produced. They differ substantially for some families (a target of 50
-// gives a 8x8=64-vertex grid and a 49-vertex diamond chain), so scaling fits
-// must use n_actual -- fitting against the target skews the exponent.
+// n is the target size, n_actual the generated one; fits use n_actual.
 void emit(FILE* out, const std::string& algo, const std::string& family, int n,
           int n_actual, int trial, double secs, long long nsp_cost,
           long long shortest_cost) {
@@ -111,14 +91,7 @@ int main(int argc, char** argv) {
     for (const Family& fam : families) {
         for (int n : sizes) {
             for (int trial = 0; trial < trials_per_size; ++trial) {
-                // Condition on instances where t is reachable from s. A graph
-                // with no s->t path is not an NSP instance at all -- every
-                // algorithm returns immediately after its first Dijkstra, so
-                // such instances measure nothing and merely dilute the
-                // existence statistics. Sparse families produce them often at
-                // small n (13/20 Erdos-Renyi at n=6). We redraw rather than
-                // silently keep them; the cap stops this looping forever on a
-                // family that genuinely cannot connect s to t.
+                // Redraw until t is reachable from s (at most 100 attempts).
                 cwz::Graph g = fam.make(n, rng);
                 for (int attempt = 0; attempt < 100; ++attempt) {
                     if (g.num_vertices() >= 2 &&
@@ -131,15 +104,10 @@ int main(int argc, char** argv) {
                 cwz::VertexId s = 0;
                 cwz::VertexId t = g.num_vertices() - 1;
 
-                // Brute force. The oracle prunes with an admissible lower
-                // bound, so it is tractable across the whole sweep on every
-                // family; the exception is the occasional Erdos-Renyi instance
-                // with a huge number of equal-cost shortest paths, which the
-                // bound cannot prune (see the note in the experiments chapter).
+                // Brute force.
                 if (n <= 70) {
                     auto t0 = clk::now();
-                    // vertex_cap 100: some generators overshoot the target n
-                    // (grid rounds the side up, so target 70 gives 9x9 = 81).
+                    // vertex_cap above the largest generated graph (grid overshoots n).
                     auto r = cwz::brute_force_nsp(g, s, t, 150);
                     double secs = seconds_since(t0);
                     emit(out, "brute", fam.name, n, g.num_vertices(), trial, secs,
@@ -157,8 +125,7 @@ int main(int argc, char** argv) {
                              (long long)r.cost, (long long)r.shortest_cost);
                     }
                 }
-                // CWZ. Cap at the max sweep size; the per-call budget below
-                // catches any pathological dense instance.
+                // CWZ.
                 if (n <= 70) {
                     auto t0 = clk::now();
                     auto r = cwz::cwz_nsp(g, s, t);

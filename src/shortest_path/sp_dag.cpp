@@ -18,7 +18,7 @@ ShortestPathDag build_sp_dag(const Graph& g, VertexId s, VertexId t,
             dag.vertex_on_sp[v] = 1;
         }
     }
-    (void)s;  // s is implicit in `from_s`; kept in the signature for clarity
+    (void)s;  // implied by from_s
     for (EdgeId i = 0; i < g.num_edges(); ++i) {
         const Edge& e = g.edge(i);
         if (from_s.dist[e.src] >= kInfWeight) continue;

@@ -1,5 +1,4 @@
-// Run CWZ on a sequence of generated graphs and print per-trial timing,
-// so we can identify pathological inputs.
+// Per-trial CWZ timing on generated graphs, to find slow inputs.
 
 #include <chrono>
 #include <cstdio>

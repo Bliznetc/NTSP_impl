@@ -12,8 +12,7 @@ using namespace cwz;
 
 namespace {
 
-// Validate that a returned NSP path: starts at s, ends at t, edges chain,
-// no vertex revisited, sum of edge weights equals the reported cost.
+// Path is simple, s->t, and its weight equals the reported cost.
 ::testing::AssertionResult check_nsp_path(
     const Graph& g, VertexId s, VertexId t,
     Weight reported_cost, const std::vector<EdgeId>& path) {
@@ -79,16 +78,7 @@ TEST(YenNsp, SkipsAlternateShortestPaths) {
 }
 
 TEST(YenNsp, MediumHandBuiltGraph) {
-    // 10 vertices. Two parallel forward paths of cost 5 plus a (2,8,3)
-    // shortcut and a direct (0,9,11) back-edge. Simple s->t paths:
-    //   0->1->2->3->4->9      cost 5  (shortest)
-    //   0->5->6->7->8->9      cost 5  (alternate shortest)
-    //   0->1->2->8->9         cost 6  (NSP via the (2,8) shortcut)
-    //   0->9                  cost 11
-    //
-    // Yen must (a) iterate past the alternate cost-5 path, (b) return the
-    // cost-6 path before considering the cost-11 direct edge. Exercises the
-    // "keep going past equal-cost alternates" path through line 152 of yen.cpp.
+    // Two cost-5 paths, NSP 0->1->2->8->9 (cost 6), direct 0->9 (cost 11).
     Graph g(10);
     g.add_edge(0, 1, 1);  g.add_edge(1, 2, 1);
     g.add_edge(2, 3, 1);  g.add_edge(3, 4, 1);
@@ -106,11 +96,7 @@ TEST(YenNsp, MediumHandBuiltGraph) {
 }
 
 TEST(YenNsp, DiamondChainK4ExtensiveAlternates) {
-    // 2^4 = 16 shortest s->t paths of cost 8, plus a direct shortcut of cost 9.
-    // Yen must iterate past all 16 before promoting the shortcut to A and
-    // recognizing it as the NSP. Stresses both the spur loop and the
-    // dedup `seen` set: many different (root, spur) decompositions of the
-    // same shortest path will be generated and must collapse to one entry.
+    // 16 shortest paths of cost 8; the NSP is the direct edge (cost 9).
     Graph g = gen::diamond_chain(/*k=*/4, /*w=*/1, /*nsp_extra=*/1);
     VertexId t = g.num_vertices() - 1;
     auto r = yen_nsp(g, 0, t);
@@ -121,10 +107,7 @@ TEST(YenNsp, DiamondChainK4ExtensiveAlternates) {
 }
 
 TEST(YenNsp, KMaxCapReturnsNoNspGracefully) {
-    // If we cap k_max far below the number of distinct shortest paths,
-    // Yen never reaches the strictly-longer candidate and must return
-    // {cost=kInfWeight, edges={}} rather than fabricating a wrong answer.
-    // Uses diamond_chain k=4 (16 shortest paths) but with k_max=3.
+    // k_max below the number of shortest paths: no NSP, not a wrong one.
     Graph g = gen::diamond_chain(/*k=*/4, /*w=*/1, /*nsp_extra=*/1);
     VertexId t = g.num_vertices() - 1;
     auto r = yen_nsp(g, 0, t, /*k_max=*/3);
@@ -134,12 +117,7 @@ TEST(YenNsp, KMaxCapReturnsNoNspGracefully) {
 }
 
 TEST(YenNsp, MatchesBruteForceOnGeneratedGraphs) {
-    // Cross-check Yen against the brute-force oracle on 25 seeded random
-    // graphs across all generator families. They must agree on both
-    // shortest_cost and nsp_cost (the only "wiggle room" Yen has is which
-    // of several equal-cost paths it returns; brute force can disagree on
-    // the *path* but not the *cost*). Whenever Yen returns an NSP, validate
-    // its structural correctness.
+    // Yen vs brute force on random graphs; costs must agree.
     std::mt19937 rng(0xBEEF);
     int verified_nsp = 0;
     for (int trial = 0; trial < 25; ++trial) {

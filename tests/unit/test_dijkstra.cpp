@@ -11,9 +11,7 @@ using namespace cwz;
 
 namespace {
 
-// Brute-force shortest-path cost from s to t by simple-path enumeration with
-// branch-and-bound pruning. Used as an independent oracle in cross-check tests.
-// Worst-case exponential but fast on the small graphs we feed it (n <= 10).
+// Oracle: shortest s->t cost by simple-path enumeration.
 Weight brute_shortest(const Graph& g, VertexId s, VertexId t) {
     Weight best = kInfWeight;
     std::vector<char> on_path(g.num_vertices(), 0);
@@ -33,10 +31,7 @@ Weight brute_shortest(const Graph& g, VertexId s, VertexId t) {
     return best;
 }
 
-// For every vertex v reachable from src, walk back along parent[] to src and
-// sum the edge weights. Assert the sum equals dist[v]. This is the key
-// invariant Dijkstra must uphold; downstream code (Yen, CWZ, ...) relies on
-// it. Returns ::testing::AssertionResult so callers can use EXPECT_TRUE.
+// Walking parent[] back from each reachable v must sum to dist[v].
 ::testing::AssertionResult check_dijkstra_parent_consistency(
     const Graph& g, VertexId src, const DijkstraResult& r) {
     for (VertexId v = 0; v < g.num_vertices(); ++v) {
@@ -132,10 +127,7 @@ TEST(DijkstraReverse, ComputesDistanceToTarget) {
 }
 
 TEST(Dijkstra, RecoveredPathCostMatchesDist) {
-    // Hand-built graph: walking back through parent[] from each vertex must
-    // produce a path whose summed weight equals dist[v]. This is the
-    // invariant Yen's NSP solver relies on -- assert in yen.cpp:
-    // path_cost(recovered) == r.shortest_cost.
+    // Parent walk must match dist (Yen relies on this).
     Graph g(5);
     g.add_edge(0, 1, 3);
     g.add_edge(0, 2, 1);
@@ -153,10 +145,7 @@ TEST(Dijkstra, RecoveredPathCostMatchesDist) {
 }
 
 TEST(Dijkstra, ParentInvariantHoldsAcrossGeneratedGraphs) {
-    // Property check across seeded random graphs from every generator family.
-    // For each, run dijkstra(g, 0) and verify the parent[]/dist[] consistency
-    // invariant. If this ever fails, a downstream user (Yen, CWZ) will
-    // silently produce wrong NSPs.
+    // Parent/dist consistency on random graphs.
     std::mt19937 rng(0xD1A57);
     for (int trial = 0; trial < 30; ++trial) {
         int kind = std::uniform_int_distribution<int>(0, 3)(rng);
@@ -178,15 +167,7 @@ TEST(Dijkstra, ParentInvariantHoldsAcrossGeneratedGraphs) {
 }
 
 TEST(Dijkstra, MediumHandBuiltAllDistancesCorrect) {
-    // 7-vertex graph with multiple alternative routes. Distances from 0
-    // computed by hand:
-    //   dist[0] = 0
-    //   dist[1] = 2  (0->1)
-    //   dist[2] = 3  (0->1->2,  beats direct 0->2 cost 5)
-    //   dist[3] = 5  (0->1->2->3, beats 0->1->3 cost 6)
-    //   dist[4] = 7  (0->1->2->3->4, beats 0->1->2->4 cost 10)
-    //   dist[5] = 8  (0->1->2->3->5 cost 8, tied with 0->...->4->5 cost 8)
-    //   dist[6] = 9  (0->...->5->6 cost 9, beats 0->...->4->6 cost 11)
+    // 7-vertex graph with several alternative routes.
     Graph g(7);
     g.add_edge(0, 1, 2);
     g.add_edge(0, 2, 5);
@@ -210,8 +191,7 @@ TEST(Dijkstra, MediumHandBuiltAllDistancesCorrect) {
 }
 
 TEST(Dijkstra, MultipleEdgesBetweenSameVerticesPicksCheapest) {
-    // Three parallel edges from 0 to 1 with weights 10, 3, 7. Dijkstra must
-    // identify the cheapest (weight 3). Then 1 -> 2 single edge w=5.
+    // Parallel edges 0->1 (10, 3, 7): the cheapest wins.
     Graph g(3);
     g.add_edge(0, 1, 10);
     g.add_edge(0, 1, 3);
@@ -223,9 +203,7 @@ TEST(Dijkstra, MultipleEdgesBetweenSameVerticesPicksCheapest) {
 }
 
 TEST(Dijkstra, MatchesBruteForceShortestOnGeneratedGraphs) {
-    // For each random graph from every family, run dijkstra(g, 0) and
-    // independently compute the s -> t shortest cost via simple-path
-    // enumeration. Equal? Then Dijkstra is producing the right number.
+    // Dijkstra vs brute-force shortest cost on random graphs.
     std::mt19937 rng(0xB4006);
     int verified = 0;
     for (int trial = 0; trial < 40; ++trial) {
@@ -252,11 +230,8 @@ TEST(Dijkstra, MatchesBruteForceShortestOnGeneratedGraphs) {
 }
 
 TEST(Dijkstra, RelaxationInvariantNoEdgeCanShortenFurther) {
-    // Textbook Dijkstra correctness: for every edge (u, v, w) with u
-    // reachable from s, dist[v] <= dist[u] + w. Equivalently, no edge can
-    // relax any vertex further. If this ever fails on any graph, Dijkstra
-    // produced a non-shortest distance for v.
-    std::mt19937 rng(0xCAFE1);  // "relax" intent, valid hex
+    // No edge can relax any distance further.
+    std::mt19937 rng(0xCAFE1);
     for (int trial = 0; trial < 30; ++trial) {
         int kind = std::uniform_int_distribution<int>(0, 3)(rng);
         int n = std::uniform_int_distribution<int>(4, 20)(rng);
