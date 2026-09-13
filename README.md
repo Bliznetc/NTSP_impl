@@ -23,9 +23,10 @@ After building, the following binaries are produced in `build/`:
 
 | Binary | Purpose |
 |--------|---------|
-| `unit_tests` | 68 GoogleTest unit tests |
+| `unit_tests` | 110 GoogleTest unit tests |
 | `fuzz_brute_vs_yen` | Differential fuzzer: brute force vs Yen-NSP |
 | `fuzz_cwz_vs_brute` | Differential fuzzer: CWZ vs brute force |
+| `fuzz_cwz_vs_yen` | Differential fuzzer: CWZ vs Yen-NSP on larger graphs |
 | `bench` | Benchmark harness on 5 graph families (`results/bench.csv`) |
 | `bench_adversarial` | Diamond-chain adversarial benchmark (`results/bench_adversarial.csv`) |
 | `nsp-cli` | Solve NSP on a single graph file |
@@ -49,6 +50,15 @@ echo "4 4
 
 Graph format: first line `n m`, then `m` lines of `u v w` (0-indexed,
 positive integer weights).
+
+### Running unit tests
+
+```bash
+./build/unit_tests                                   # all tests
+./build/unit_tests --gtest_filter='TwoVdp.*'         # only 2-VDP
+./build/unit_tests --gtest_filter='TwoVdp.Exhaustive*'  # 2-VDP vs brute-force oracle
+./build/unit_tests --gtest_list_tests                # list test names
+```
 
 ### Reproducing the benchmark
 
@@ -83,8 +93,8 @@ for s in $(seq 3001 3005); do ./build/fuzz_cwz_vs_brute  800 14 $s; done
 | Directory | Contents |
 |-----------|----------|
 | `src/graph/` | `Graph` data structure |
-| `src/shortest_path/` | Dijkstra forward/reverse, shortest-path DAG |
-| `src/two_vdp/` | 2-VDP-in-DAG (max-flow based) |
+| `src/shortest_path/` | Dijkstra forward/reverse |
+| `src/two_vdp/` | 2-VDP-in-DAG (Fortune–Hopcroft–Wyllie) and a brute-force oracle for it |
 | `src/cwz/` | CWZ reductions and layered NSP |
 | `src/baseline/` | Brute-force NSP, Yen-NSP |
 | `src/cli/` | `nsp-cli` |
@@ -102,47 +112,43 @@ candidates. To build (requires `pdflatex` + `bibtex`):
 
 ```bash
 cd thesis
-pdflatex main && bibtex main && pdflatex main && pdflatex main
+latexmk -pdf main.tex
 ```
 
 ## Status
 
 | Component | Status |
 |-----------|--------|
-| Graph + Dijkstra + SP-DAG | Done |
+| Graph + Dijkstra | Done |
 | Brute-force NSP oracle | Done |
 | Yen-NSP heuristic | Done |
 | Graph generators | Done |
-| 2-VDP-in-DAG | Done (max-flow based; not Tholey 2012 linear-time, same O(V+E)) |
-| `(s,t)`-straight reduction (`NextSP`) | Done (iterative folding; K=5 multi-edge cap, see below) |
+| 2-VDP-in-DAG | Done (Fortune–Hopcroft–Wyllie for two paths, `O(|V|^2 + |V||E|)` per call; not Tholey 2012 linear-time) |
+| Brute-force 2-VDP oracle | Done |
+| `(s,t)`-straight reduction (`NextSP`) | Done (iterative folding) |
 | `(s,t)`-layered reduction (`NextSP-Straight`) | Done (removes forward/sideways back-edges, records candidates → strictly layered) |
 | CWZ layered algorithm (`NextSP-Layered`) | Done — faithful Lemma 5.3 6-tuple enumeration |
 | Benchmark harness + plots | Done |
 | Thesis drafts | Done (all 6 chapters, needs supervisor pass) |
 
-Correctness: the full pipeline matches the brute-force oracle with **zero
-mismatches across 34,000 random trials** (35 distinct seeds, |V|≤14), and matches Yen on every
-benign benchmark instance up to |V|=50. An ablation confirms the 6-tuple
-enumeration alone suffices on the strictly-layered graph.
+Correctness:
 
-One approximation remains: `reduce_to_straight` keeps up to K=5 cheapest
-distinct shortcut weights per vertex pair instead of implementing `NextSP`'s
-candidate-recording (K=1 with candidates). K=1 alone misses NSPs; no cap
-exhausts memory on dense inputs; K=5 is validated empirically. See
-`thesis/chapters/implementation.tex` §"Multi-edge cap".
+- The full pipeline matches the brute-force NSP oracle with **zero mismatches
+  across 34,000 random trials** (35 distinct seeds, |V| ≤ 14) and on all 1,200
+  benchmark instances (|V| up to 81).
+- The 2-VDP solver matches the brute-force 2-VDP oracle on **1,299,749 queries**:
+  every terminal quadruple of all DAGs on 4 vertices, all 5-vertex DAGs, and
+  400 random DAGs with up to 7 vertices. Every returned pair of paths is also
+  checked to be vertex-disjoint with the right endpoints.
 
 ### A note on complexity
 
 The paper proves a worst-case bound of `O(|V|^4 |E|^3 log|V|)`. That bound
-follows from the algorithm's *structure* (which this code now matches), not
-from the benchmarks: experiments measure runtime on particular inputs and
-cannot verify a worst-case upper bound. What the benchmarks do show is that
-the implementation is empirically polynomial with a modest exponent that
-depends on the family (log-log fit slope ≈ 1.2 on layered graphs up to ≈ 4.9
-on dense Erdős–Rényi) — i.e. far below the worst case on
-real inputs. Two caveats on inheriting the paper's exact bound: the max-flow
-2-VDP is `O(|V|+|E|)` per call (same class as Tholey, larger constant), and
-the `K=5` cap is a non-rigorous bound on the `reduce_to_straight` blow-up
-(uncapped it is exponential). Implementing `NextSP`'s candidate-recording
-would make the whole pipeline a provable transcription of the paper's
-complexity.
+follows from the algorithm's *structure*, not from the benchmarks: experiments
+measure runtime on particular inputs and cannot verify a worst-case upper
+bound. What the benchmarks do show is that the implementation is empirically
+polynomial with an exponent that depends on the family (log-log fit slope
+≈ 1.3 on diamond chains up to ≈ 4.4 on dense Erdős–Rényi), far below the worst
+case. The implementation does not attain the paper's exact bound: its 2-VDP
+subroutine costs `O(|V|^2 + |V||E|)` per call instead of Tholey's
+`O(|V| + |E|)`.
