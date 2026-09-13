@@ -27,18 +27,11 @@ def main():
     df = pd.read_csv(csv_path)
     df["has_nsp"] = df["nsp_cost"] != INF_SENTINEL
     df["had_path"] = df["shortest_cost"] != INF_SENTINEL
-    # Sub-microsecond runtimes are below our wall-clock timer resolution and are
-    # recorded as 0.000000 in the CSV; on a log axis those would blow the plot
-    # down to 10^-300. Clamp to a 1 microsecond floor for display.
+    # Clamp sub-microsecond runtimes (recorded as 0) for log axes.
     TIMER_FLOOR = 1e-6
     df["seconds"] = df["seconds"].clip(lower=TIMER_FLOOR)
 
-    # Instances where t is unreachable from s are degenerate: every algorithm
-    # returns straight after its first Dijkstra, so they measure nothing but
-    # startup cost. At |V|=6 they are the majority of the sparse random
-    # families (13/20 Erdos-Renyi, 11/20 random DAG), which flattened the
-    # small-|V| end of every curve. Runtime aggregates use solvable instances
-    # only; the existence plot below still reports over all instances.
+    # Runtime plots use only instances with an s->t path.
     solvable = df[df["had_path"]]
     n_drop = len(df) - len(solvable)
     print(f"runtime plots: dropped {n_drop}/{len(df)} rows with no s->t path")
@@ -47,14 +40,14 @@ def main():
     algos = ["brute", "yen", "cwz"]
     colors = {"brute": "tab:gray", "yen": "tab:orange", "cwz": "tab:blue"}
 
-    # Plot 1: runtime vs n per family, one subplot per family, laid out on a
-    # grid of at most 3 columns so the panels stay large and readable.
-    # Shaded band = interquartile range (25th-75th percentile) across trials,
-    # which is robust to single-trial outliers. The dot is the median.
+    # Plot 1: runtime vs n per family; line = median, band = IQR.
+    # Font sizes account for scaling the figure down to \textwidth.
     ncols = 3
     nrows = (len(families) + ncols - 1) // ncols
-    fig, axes = plt.subplots(nrows, ncols, figsize=(5.5 * ncols, 4.5 * nrows),
+    fig, axes = plt.subplots(nrows, ncols, figsize=(4.6 * ncols, 3.6 * nrows),
                              sharey=True, squeeze=False)
+    for a in axes.flatten():
+        a.tick_params(labelsize=15)
     flat_axes = axes.flatten()
     for idx, fam in enumerate(families):
         ax = flat_axes[idx]
@@ -72,18 +65,18 @@ def main():
                             color=colors[algo], alpha=0.2, linewidth=0)
             ax.plot(n_values, median.values, "o-", label=algo, color=colors[algo])
         ax.set_yscale("log")
-        ax.set_xlabel("|V| (target)")
-        ax.set_title(fam, fontsize=13)
+        ax.set_xlabel("|V| (target)", fontsize=17)
+        ax.set_title(fam, fontsize=20)
         ax.grid(True, which="both", alpha=0.3)
         # y-label on the leftmost panel of each row
         if idx % ncols == 0:
-            ax.set_ylabel("runtime (s) — median, IQR shaded")
+            ax.set_ylabel("runtime (s)", fontsize=17)
     # Hide any unused panels on the grid.
     for j in range(len(families), len(flat_axes)):
         flat_axes[j].set_visible(False)
-    flat_axes[0].legend(fontsize=11)
+    flat_axes[0].legend(fontsize=16)
     fig.suptitle("NSP algorithm runtime vs graph size (20 trials per point)",
-                 fontsize=15)
+                 fontsize=24)
     fig.tight_layout(rect=[0, 0, 1, 0.97])
     fig.savefig(out_dir / "runtime_by_family.pdf")
     fig.savefig(out_dir / "runtime_by_family.png", dpi=120)
@@ -92,9 +85,7 @@ def main():
     # Plot 2: log-log runtime growth for CWZ to estimate the scaling exponent.
     fig, ax = plt.subplots(figsize=(5, 4))
     cwz = solvable[solvable["algo"] == "cwz"]
-    # Aggregate with the MEDIAN, matching the statistic reported everywhere else
-    # (an earlier version fitted means here, which the pooled fit let the
-    # slowest family dominate and produced a slope inconsistent with the text).
+    # Median, consistent with the rest of the thesis.
     slopes = {}
     for fam in families:
         ag = cwz[cwz["family"] == fam]
@@ -124,13 +115,9 @@ def main():
     fig.savefig(out_dir / "cwz_scaling.png", dpi=120)
     print(f"wrote {out_dir / 'cwz_scaling.pdf'}")
 
-    # Plot 3: NSP-existence rate per family per n (informational; used in thesis
-    # to describe the input distribution).
+    # Plot 3: NSP existence rate per family.
     fig, ax = plt.subplots(figsize=(5, 4))
-    # Ground truth comes from the brute-force oracle, NOT from Yen. Yen reports
-    # "no NSP" when it exhausts its k_max enumeration cap, which on diamond
-    # chains at |V| >= 40 made this curve collapse to zero on the one family
-    # that provably always has an NSP. Brute force is exact.
+    # Ground truth from brute force (Yen can false-negative at its k_max cap).
     for fam in families:
         sub = df[(df["family"] == fam) & (df["algo"] == "brute")]
         if sub.empty:
@@ -162,8 +149,7 @@ def main():
             agree = sum(cwz_t.loc[i] == yen_t.loc[i] for i in both)
             row = {"family": fam, "n": n, "trials": len(both),
                    "cwz_yen_agree": agree}
-            # CWZ vs the exact oracle -- the stronger check, available across
-            # the whole sweep now that brute force is no longer capped.
+            # CWZ vs the exact oracle.
             vs_brute = cwz_t.index.intersection(brute_t.index)
             row["brute_trials"] = len(vs_brute)
             row["cwz_brute_agree"] = sum(cwz_t.loc[i] == brute_t.loc[i]
